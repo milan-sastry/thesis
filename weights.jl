@@ -16,7 +16,8 @@ row_names = Name.(cells)
 col_names = row_names  
 
 weights = W[row_names, col_names]
-weights_sparse = parent(weights)     
+weights_sparse = parent(weights)  
+row_types = ind2type[id2ind.(cells)]   
 
 for (row, name) in zip(cells, row_names)
     type = ind2type[id2ind(row)]

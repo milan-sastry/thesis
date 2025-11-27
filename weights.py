@@ -1,6 +1,7 @@
 from juliacall import Main as jl
 import numpy as np
 import scipy.sparse as sp
+import pickle
 
 jl.include("weights.jl")
 
@@ -51,4 +52,12 @@ A_neg_norm = A_neg @ D_Iinv
 W_norm = A_pos_norm - A_neg_norm
 
 negative_count = W_norm < 0
-print(W_norm)
+neuron_types = np.array(list(jl.row_types))
+
+data_to_save = {
+    'W_norm': W_norm,
+    'neuron_types': neuron_types
+}
+with open('connectome_data.pkl', 'wb') as f:
+    pickle.dump(data_to_save, f)
+
