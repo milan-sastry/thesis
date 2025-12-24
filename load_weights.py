@@ -7,6 +7,7 @@ with open('connectome_data.pkl', 'rb') as f:
 
 W_norm = data['W_norm']
 neuron_types = data['neuron_types']
+tm1_coords = data['tm1_coords']
 
 W_coo = W_norm.tocoo()
 
@@ -22,5 +23,6 @@ weights = torch.tensor(
     np.array(W_coo.data, dtype=np.float64, copy=True).tolist(), 
     dtype=torch.float32
 )
+
 
 print(f"Loaded {len(weights)} connections between {len(neuron_types)} neurons")
