@@ -1,0 +1,132 @@
+bar sweep results
+Tested 4 orientations: [  0  45  90 135]
+angle: 0°
+
+Excluding 775 Tm1 input neurons from analysisTop 10 Responding Neurons - Dm3 Trio
+ 1. Neuron 1907 (Dm3q    ): 45.0000
+ 2. Neuron 1237 (Dm3p    ): 38.0000
+ 3. Neuron 1587 (Dm3p    ): 37.0000
+ 4. Neuron 1667 (Dm3q    ): 36.0000
+ 5. Neuron 1559 (Dm3p    ): 35.0000
+ 6. Neuron 1144 (Dm3p    ): 32.0000
+ 7. Neuron 1640 (Dm3q    ): 32.0000
+ 8. Neuron 2007 (Dm3q    ): 32.0000
+ 9. Neuron 1278 (Dm3p    ): 32.0000
+10. Neuron 2044 (Dm3q    ): 31.0000
+Top 10 Responding Neurons - Tmy Trio
+ 1. Neuron 2350 (TmY9q   ): 39.0000
+ 2. Neuron 2205 (TmY4    ): 35.0000
+ 3. Neuron 2230 (TmY4    ): 34.0000
+ 4. Neuron 2171 (TmY4    ): 33.0000
+ 5. Neuron 2203 (TmY4    ): 31.0000
+ 6. Neuron 2400 (TmY9q   ): 31.0000
+ 7. Neuron 2269 (TmY9q   ): 30.0000
+ 8. Neuron 2153 (TmY4    ): 29.0000
+ 9. Neuron 2455 (TmY9q⊥  ): 26.0000
+10. Neuron 2120 (TmY4    ): 26.0000
+Responses by cell type:
+  Dm3p    :   62/ 500 (12.40%) active (max: 38.000, mean: 1.394)
+  Dm3q    :   83/ 456 (18.20%) active (max: 45.000, mean: 2.053)
+  Dm3v    :   88/ 320 (27.50%) active (max: 25.000, mean: 2.025)
+  TmY4    :   28/ 211 (13.27%) active (max: 35.000, mean: 2.137)
+  TmY9q   :   29/ 173 (16.76%) active (max: 39.000, mean: 1.711)
+  TmY9q⊥  :   36/ 189 (19.05%) active (max: 26.000, mean: 1.751)
+
+
+angle: 45°
+
+Excluding 775 Tm1 input neurons from analysisTop 10 Responding Neurons - Dm3 Trio
+ 1. Neuron 1663 (Dm3q    ): 60.0000
+ 2. Neuron 1680 (Dm3q    ): 56.0000
+ 3. Neuron 1643 (Dm3q    ): 53.0000
+ 4. Neuron 1993 (Dm3q    ): 45.0000
+ 5. Neuron 1728 (Dm3q    ): 45.0000
+ 6. Neuron 1782 (Dm3q    ): 41.0000
+ 7. Neuron 1665 (Dm3q    ): 41.0000
+ 8. Neuron 1709 (Dm3q    ): 41.0000
+ 9. Neuron 1771 (Dm3q    ): 38.0000
+10. Neuron 1716 (Dm3q    ): 36.0000
+Top 10 Responding Neurons - Tmy Trio
+ 1. Neuron 2406 (TmY9q   ): 50.0000
+ 2. Neuron 2278 (TmY9q   ): 41.0000
+ 3. Neuron 2134 (TmY4    ): 36.0000
+ 4. Neuron 2365 (TmY9q   ): 30.0000
+ 5. Neuron 2346 (TmY9q   ): 25.0000
+ 6. Neuron 2175 (TmY4    ): 23.0000
+ 7. Neuron 2191 (TmY4    ): 22.0000
+ 8. Neuron 2500 (TmY9q⊥  ): 21.0000
+ 9. Neuron 2333 (TmY9q   ): 21.0000
+10. Neuron 2153 (TmY4    ): 19.0000
+Responses by cell type:
+  Dm3p    :   81/ 500 (16.20%) active (max: 25.000, mean: 1.202)
+  Dm3q    :   33/ 456 (7.24%) active (max: 60.000, mean: 1.465)
+  Dm3v    :   64/ 320 (20.00%) active (max: 24.000, mean: 1.522)
+  TmY4    :   23/ 211 (10.90%) active (max: 36.000, mean: 1.336)
+  TmY9q   :   19/ 173 (10.98%) active (max: 50.000, mean: 1.468)
+  TmY9q⊥  :   38/ 189 (20.11%) active (max: 21.000, mean: 1.513)
+
+
+angle: 90°
+
+Excluding 775 Tm1 input neurons from analysisTop 10 Responding Neurons - Dm3 Trio
+ 1. Neuron  810 (Dm3v    ): 83.0000
+ 2. Neuron  956 (Dm3v    ): 71.0000
+ 3. Neuron 1006 (Dm3v    ): 65.0000
+ 4. Neuron  797 (Dm3v    ): 57.0000
+ 5. Neuron  993 (Dm3v    ): 51.0000
+ 6. Neuron  892 (Dm3v    ): 46.0000
+ 7. Neuron  932 (Dm3v    ): 45.0000
+ 8. Neuron  995 (Dm3v    ): 44.0000
+ 9. Neuron  915 (Dm3v    ): 41.0000
+10. Neuron 1144 (Dm3p    ): 36.0000
+Top 10 Responding Neurons - Tmy Trio
+ 1. Neuron 2500 (TmY9q⊥  ): 78.0000
+ 2. Neuron 2437 (TmY9q⊥  ): 46.0000
+ 3. Neuron 2566 (TmY9q⊥  ): 37.0000
+ 4. Neuron 2318 (TmY9q   ): 36.0000
+ 5. Neuron 2480 (TmY9q⊥  ): 33.0000
+ 6. Neuron 2521 (TmY9q⊥  ): 32.0000
+ 7. Neuron 2171 (TmY4    ): 29.0000
+ 8. Neuron 2224 (TmY4    ): 28.0000
+ 9. Neuron 2547 (TmY9q⊥  ): 25.0000
+10. Neuron 2462 (TmY9q⊥  ): 24.0000
+Responses by cell type:
+  Dm3p    :   71/ 500 (14.20%) active (max: 36.000, mean: 1.808)
+  Dm3q    :   87/ 456 (19.08%) active (max: 36.000, mean: 2.033)
+  Dm3v    :   27/ 320 (8.44%) active (max: 83.000, mean: 2.012)
+  TmY4    :   28/ 211 (13.27%) active (max: 29.000, mean: 1.540)
+  TmY9q   :   29/ 173 (16.76%) active (max: 36.000, mean: 2.064)
+  TmY9q⊥  :   25/ 189 (13.23%) active (max: 78.000, mean: 2.418)
+
+
+angle: 135°
+
+Excluding 775 Tm1 input neurons from analysisTop 10 Responding Neurons - Dm3 Trio
+ 1. Neuron 1521 (Dm3p    ): 55.0000
+ 2. Neuron 1102 (Dm3p    ): 50.0000
+ 3. Neuron 1198 (Dm3p    ): 43.0000
+ 4. Neuron 1417 (Dm3p    ): 39.0000
+ 5. Neuron 1442 (Dm3p    ): 38.0000
+ 6. Neuron 1409 (Dm3p    ): 38.0000
+ 7. Neuron 1197 (Dm3p    ): 37.0000
+ 8. Neuron 1144 (Dm3p    ): 35.0000
+ 9. Neuron 1582 (Dm3p    ): 33.0000
+10. Neuron 1336 (Dm3p    ): 32.0000
+Top 10 Responding Neurons - Tmy Trio
+ 1. Neuron 2056 (TmY4    ): 37.0000
+ 2. Neuron 2461 (TmY9q⊥  ): 36.0000
+ 3. Neuron 2589 (TmY9q⊥  ): 33.0000
+ 4. Neuron 2121 (TmY4    ): 29.0000
+ 5. Neuron 2607 (TmY9q⊥  ): 29.0000
+ 6. Neuron 2193 (TmY4    ): 28.0000
+ 7. Neuron 2187 (TmY4    ): 27.0000
+ 8. Neuron 2171 (TmY4    ): 23.0000
+ 9. Neuron 2575 (TmY9q⊥  ): 23.0000
+10. Neuron 2226 (TmY4    ): 23.0000
+Responses by cell type:
+  Dm3p    :   38/ 500 (7.60%) active (max: 55.000, mean: 1.370)
+  Dm3q    :   99/ 456 (21.71%) active (max: 20.000, mean: 1.583)
+  Dm3v    :   62/ 320 (19.38%) active (max: 29.000, mean: 1.419)
+  TmY4    :   29/ 211 (13.74%) active (max: 37.000, mean: 1.450)
+  TmY9q   :   34/ 173 (19.65%) active (max: 20.000, mean: 1.555)
+  TmY9q⊥  :   29/ 189 (15.34%) active (max: 36.000, mean: 1.847)

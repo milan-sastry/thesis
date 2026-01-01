@@ -27,6 +27,8 @@ negative_edges = edges[edges[:, 2] < 0]
 
 A = coo.tocsr() 
 
+W_raw = A
+
 A_pos = A.multiply(A > 0)
 
 A_neg = (-A).multiply(A < 0)
@@ -51,11 +53,13 @@ neuron_types = np.array(list(jl.row_types))
 tm1_coords = np.array([(int(coord[0]), coord[1][0], coord[1][1]) 
                        for coord in jl.tm1_coords])
 data_to_save = {
+    'W_raw': W_raw,
     'W_norm': W_norm,
     'neuron_types': neuron_types,
     'tm1_coords': tm1_coords,
+    'row_ids': row_ids,
 
 }
-with open('connectome_data.pkl', 'wb') as f:
+with open('./connectome_data/connectome_data.pkl', 'wb') as f:
     pickle.dump(data_to_save, f)
 
