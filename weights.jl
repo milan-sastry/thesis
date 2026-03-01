@@ -16,13 +16,16 @@ weights = W[row_names, col_names]
 weights_sparse = parent(weights)  
 row_types = ind2type[id2ind.(cells)]   
 tm1_coords = []
+full_input_total = []
+for (idx, (row, name)) in enumerate(zip(cells, row_names))
 
-for (row, name) in zip(cells, row_names)
     type = ind2type[id2ind(row)]
-    # print(typeof(name))
+   # print(typeof(name))
+    push!(full_input_total, sum(W[:, name]))
     if type in inhibitory_types
         # println("Inhibitory type: ", type)
         weights[name, :] .= -abs.(weights[name, :])
+      
     end
     if type == "Tm1"
         try
