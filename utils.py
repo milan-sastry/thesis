@@ -310,6 +310,53 @@ def fit_von_mises(angles_deg, values, period_deg=180.0, n_fit_points=361):
     }
 
 
+def compute_pq_vector(angle: float, spatial_frequency: float = 0.1):
+    """
+    Compute the (p, q) wave vector components for a given orientation angle
+    and spatial frequency on the hex grid.
+    """
+    p = -np.cos(np.radians(angle)) + np.sin(np.radians(angle)) / np.sqrt(3)
+    q = np.cos(np.radians(angle)) + np.sin(np.radians(angle)) / np.sqrt(3)
+    return spatial_frequency * p, spatial_frequency * q
+
+
+def create_sine_grating(
+    cell_ids,
+    tm1_coords,
+    n_cells,
+    angle: float,
+    spatial_frequency: float,
+    phase: float,
+    amplitude: float,
+    offset: float,
+    center: tuple | None = None,
+) -> np.ndarray:
+    """
+    Create a sine grating stimulus on the hex grid.
+
+    Args:
+        cell_ids: ordered list of Tm1 cell IDs
+        tm1_coords: dict mapping cell_id -> (p, q)
+        n_cells: total number of Tm1 cells in the network
+        angle: grating orientation in degrees
+        spatial_frequency: spatial frequency of the grating
+        phase: phase offset in radians
+        amplitude: grating amplitude
+        offset: DC offset added to each sample
+        center: (p0, q0) reference point; defaults to (0, 0)
+    """
+    kp, kq = compute_pq_vector(angle, spatial_frequency)
+    p0, q0 = center if center is not None else (0.0, 0.0)
+    grating = np.zeros(n_cells, dtype=float)
+    for idx, cell_id in enumerate(cell_ids):
+        if cell_id not in tm1_coords:
+            continue
+        p, q = tm1_coords[cell_id]
+        grating[idx] = max(0.0, amplitude * np.sin(kp * (p - p0) + kq * (q - q0) + phase) + offset)
+
+    return grating
+
+
 def remove_reciprocal_connections(source_indices, target_indices, weights, neuron_types):
     """
     Filter edges to only keep those with Tm1 as the source type.

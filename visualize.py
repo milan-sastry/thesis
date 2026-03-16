@@ -1,3 +1,4 @@
+from operator import index
 import os
 import copy
 import numpy as np
@@ -182,7 +183,7 @@ def visualize_stimulus_with_tm1_inputs(
     title=None,
     stimulus_cmap="Greys_r",
     tm1_input_cmap="viridis",
-    stimulus_alpha=0.85,
+
     base_edge_color="#B0B0B0",
     base_edge_width=0.5,
     input_edge_width_range=(1.0, 3.5),
@@ -190,6 +191,7 @@ def visualize_stimulus_with_tm1_inputs(
     add_colorbar=True,
     stimulus_norm=None,
     synapse_norm=None,
+    clip_stimulus_zero=False,
 ):
     """
     Overlay a stimulus map and TM1 inputs to neuron_index on the same hex lattice.
@@ -221,11 +223,14 @@ def visualize_stimulus_with_tm1_inputs(
         dtype=float,
     )
 
+    if clip_stimulus_zero:
+        stimulus_values = np.maximum(stimulus_values, 0.0)
     if stimulus_norm is None:
-        vmin = float(np.min(stimulus_values))
+        vmin = 0.0 if clip_stimulus_zero else float(np.min(stimulus_values))
         vmax = float(np.max(stimulus_values))
     else:
-        vmin, vmax = float(stimulus_norm[0]), float(stimulus_norm[1])
+        vmin = max(float(stimulus_norm[0]), 0.0) if clip_stimulus_zero else float(stimulus_norm[0])
+        vmax = float(stimulus_norm[1])
     if np.isclose(vmin, vmax):
         norm = mcolors.Normalize(vmin=vmin - 1e-6, vmax=vmax + 1e-6)
     else:
@@ -272,7 +277,6 @@ def visualize_stimulus_with_tm1_inputs(
             facecolor=face_color,
             edgecolor=edge_color,
             linewidth=float(line_width),
-            alpha=stimulus_alpha,
             zorder=2,
         )
         ax.add_patch(hex_patch)
@@ -281,7 +285,7 @@ def visualize_stimulus_with_tm1_inputs(
             ax.text(
                 float(cx),
                 float(cy),
-                f"({int(p_val)},{int(q_val)})",
+                f"({int(p_val)},{int(q_val)}) : {stim_val}",
                 ha="center",
                 va="center",
                 fontsize=4,
@@ -379,7 +383,8 @@ def save_tm1_inputs_grid(
                     local_max if synapse_global_max is None else max(synapse_global_max, local_max)
                 )
         all_vals = np.concatenate(neuron_stimuli) if neuron_stimuli else np.array([0.0])
-        global_norm = (float(np.min(all_vals)), float(np.max(all_vals)))
+        global_vmin = 0.0 if overlay_kwargs.get("clip_stimulus_zero") else float(np.min(all_vals))
+        global_norm = (global_vmin, float(np.max(all_vals)))
         if synapse_global_min is None or synapse_global_max is None:
             synapse_global_norm = (0.0, 1.0)
         else:
@@ -611,8 +616,50 @@ def visualize_responses(
     plt.show()
 
 if __name__ == "__main__":
-    for index in [2412,2332, 2364, 2267, 2359, 2369, 2422, 2326, 2315, 2265]:
-        visualize_tm1_inputs(index)
+        centers = {
+            1521: (18.5, 17.0), # Dm3p
+            1685: (18,16.5), # Dm3q
+            972: (18.5, 17.5), # Dm3v
+            2414: (18, 15), # TmY9q
+            2498: (18,17),# TmY9q⊥
+            2168: (17.5, 16.5), # TmY4
+        }
+        angles = [60,120,0,120,30,90]
+        index = 0
+        stimuli = []
+        for cell_id, center in centers.items():
+
+            stim = StimulusGenerator(tm1_coords, neuron_types, row_ids)
+            stimulus = stim.create_sine_grating(
+                angle=angles[index],
+                spatial_frequency=2*np.pi/4,
+                phase=np.pi/2,
+                amplitude=0.75,
+                offset=0.25,
+                center=center,
+            )
+            index+=1
+            stimuli.append(stimulus)
+        save_tm1_inputs_grid(
+            neuron_indices=list(centers.keys()),
+            stimulus_by_neuron=stimuli,
+            overlay=True,
+            output_file="./tm1_inputs/tm1_inputs_with_stimuli.png",
+            ncols=3,
+            overlay_kwargs={
+                "stimulus_cmap": "Greys_r",
+                "tm1_input_cmap": "viridis",
+
+                "base_edge_color": "#B0B0B0",
+                "base_edge_width": 0.5,
+                "input_edge_width_range": (1.0, 4.0),
+                "annotate_pq": False,
+                "clip_stimulus_zero": True,
+            },
+        )
+
+
+
 
 
 

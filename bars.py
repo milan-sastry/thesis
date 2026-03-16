@@ -4,7 +4,7 @@ from stimulus import StimulusGenerator
 import matplotlib.pyplot as plt
 import analysis as an
 from network import DrosophilaOpticLobeCircuit
-import grating_visualization as gv
+import tuning_curves as tc
 from dataset import filter_model_kwargs
 from visualize import visualize_responses
 from utils import to_numpy, pq_to_xy
@@ -277,15 +277,20 @@ def generate_bar_response(
     length,
     amplitude,
     center,
-    mean_duration=50,
-    mean_intensity=0.1,
     bar_duration=50,
     model_settings=None,
     sigma=0.5,
     on=True,
+    use_flash=False,
+    mean_duration=50,
+    mean_intensity=0.1,
 ):
     """
-    Generate a response to a full-field baseline followed by an oriented Gaussian bar stimulus.
+    Generate a response to an oriented Gaussian bar stimulus.
+
+    If use_flash=True, prepends a mean-gray baseline phase and adds the mean
+    to the bar, replicating the old flash experiment.  Otherwise the bar is
+    presented directly until steady state.
     """
     stimulus_generator = StimulusGenerator(
         lw.tm1_coords,
@@ -305,8 +310,11 @@ def generate_bar_response(
         sigma=sigma,
     )
 
-    mean_gray = stimulus_generator.create_mean_gray(intensity=mean_intensity)
-    blocks = [(mean_gray, mean_duration), (bar + mean_gray, bar_duration)]
+    if use_flash:
+        mean_gray = stimulus_generator.create_mean_gray(intensity=mean_intensity)
+        blocks = [(mean_gray, mean_duration), (bar + mean_gray, bar_duration)]
+    else:
+        blocks = [(bar, bar_duration)]
     sequence = stimulus_generator.sequence_from_blocks(blocks)
     stimulus = stimulus_generator.to_torch(sequence)
 
@@ -419,7 +427,7 @@ def generate_bar_response(
 
 
     #     results = {"runs": runs_data}
-    #     curves = gv.tuning_curve(
+    #     curves = tc.tuning_curve(
     #         results,
     #         flash_windows=(10, 20.0),
     #         baseline_window=(0, 10.0),
@@ -431,7 +439,7 @@ def generate_bar_response(
     #     curves_arr.append(curves)
     #     params_arr.append(scale_factor)
 
-    # gv.plot_curves_by_param(
+    # tc.plot_curves_by_param(
     #     curves_arr,
     #     params_arr,
     #     filename="flash_bar_Dm3_scaled_individual_1.0.png",

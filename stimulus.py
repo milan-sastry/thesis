@@ -4,7 +4,7 @@ import matplotlib.patches as patches
 import torch
 from scipy.special import erf
 import matplotlib.ticker as ticker
-from utils import pq_to_xy
+from utils import pq_to_xy, create_sine_grating as _create_sine_grating
 
 class StimulusGenerator:
     def __init__(self, tm1_pq_coords, 
@@ -116,17 +116,17 @@ class StimulusGenerator:
         
         x, y = pq_to_xy(p_coords, q_coords)
         
-        scatter = ax.scatter(x, y, c=stimulus_for_viz, cmap='hot', 
+        scatter = ax.scatter(x, y, c=stimulus_for_viz, cmap='Greys_r', 
                            s=100, edgecolors='grey', linewidth=0.5,
                            vmin=0, vmax=1, marker='H')
 
         cbar = fig.colorbar(scatter, ax=ax, pad=0.02, fraction=0.046)
         cbar.set_label("Stimulus Value", fontsize=12)
         
-        for px, py, p_val, q_val in zip(x, y, p_coords, q_coords):
-            ax.text(px, py, f'({int(p_val)},{int(q_val)})', 
-                  ha='center', va='center', fontsize=4, 
-                  fontweight='bold', color='red')
+        # for px, py, p_val, q_val in zip(x, y, p_coords, q_coords):
+        #     ax.text(px, py, f'({int(p_val)},{int(q_val)})', 
+        #           ha='center', va='center', fontsize=4, 
+        #           fontweight='bold', color='red')
         
         if rect is not None:
             ax.add_patch(rect)
@@ -162,24 +162,24 @@ class StimulusGenerator:
 
     def create_sine_grating(
         self,
-        wave_vector: tuple[float, float],
+        angle: float,
+        spatial_frequency: float,
         phase: float,
         amplitude: float,
         offset: float,
         center: tuple[float, float] | None = None,
     ) -> np.ndarray:
-        kp, kq = wave_vector
-        if center is None:
-            p0, q0 = 0.0, 0.0
-        else:
-            p0, q0 = center
-        grating = np.zeros(self.n_cells, dtype=float)
-        for idx, cell_id in enumerate(self.cell_ids):
-            if cell_id not in self.tm1_coords:
-                continue
-            p, q = self.tm1_coords[cell_id]
-            grating[idx] = amplitude * np.sin(kp * (p - p0) + kq * (q - q0) + phase) + offset
-        return grating
+        return _create_sine_grating(
+            self.cell_ids,
+            self.tm1_coords,
+            self.n_cells,
+            angle,
+            spatial_frequency,
+            phase,
+            amplitude,
+            offset,
+            center,
+        )
 
     def create_mean_gray(self, intensity: float = 0.0) -> np.ndarray:
         return np.ones(self.n_cells, dtype=float) * intensity
@@ -221,27 +221,29 @@ class StimulusGenerator:
         return np.vstack(sequence) if sequence else np.zeros((0, self.n_cells), dtype=float)
     
     def create_moving_grating_sequence(
-        stimulus_generator,
-        wave_vector,              
+        self,
+        angle,
+        spatial_frequency=0.1,
         amplitude=1.0,
         offset=0.0,
-        phase0=0.0,
-        temporal_freq=2.0,        
-        dt=0.01,                  
+        phi0=0.0,
+        temporal_freq=2.0,
+        dt=0.1,
         steps=200,
     ):
         frames = []
         for t_idx in range(steps):
             t = t_idx * dt
-            phase_t = phase0 - 2 * np.pi * temporal_freq * t   
-            frame = stimulus_generator.create_sine_grating(
-                wave_vector=wave_vector,
-                phase=phase_t,
+            phi_t = phi0 - 2 * np.pi * temporal_freq * t
+            frame = self.create_sine_grating(
+                angle=angle,
+                spatial_frequency=spatial_frequency,
+                phase=phi_t,
                 amplitude=amplitude,
                 offset=offset,
             )
             frames.append(frame)
-        return np.stack(frames, axis=0)  
+        return np.stack(frames, axis=0)
 
     def to_torch(
         self,
@@ -270,3 +272,4 @@ class StimulusGenerator:
             raise ValueError("stimulus must be 1D (n_cells) or 2D (steps, n_cells)")
 
         return tensor.to(device)
+    

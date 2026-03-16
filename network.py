@@ -7,10 +7,12 @@ class DrosophilaOpticLobeCircuit(nn.Module):
     def __init__(self, neuron_types, source_indices, target_indices, weights, 
                  dt=0.1, tau_init=1.0, device='cpu', remove_reciprocal=False,
                  vrest_init=0.0, tau_by_type=None, vrest_by_type=None, default_scale=1.0,
-                 scale_by_connection_type=None):
+                 scale_by_connection_type=None, tm1_tau_hp=6.3, tm1_tau_lp=1.3):
         super().__init__()
         self.device = device
         self.dt = dt
+        self.tm1_tau_hp = tm1_tau_hp
+        self.tm1_tau_lp = tm1_tau_lp
         if remove_reciprocal:
             self._source_indices, self._target_indices, self._weights = remove_reciprocal_connections(
                 source_indices, target_indices, weights, neuron_types
@@ -125,7 +127,7 @@ class DrosophilaOpticLobeCircuit(nn.Module):
         """
         return torch.relu(v)
 
-    def forward(self, tm1_input, v_init=None, steps=None, return_history=False):
+    def forward(self, tm1_input, v_init=None, steps=None, return_history=False, steady_state_tol=1e-5):
         if v_init is None:
             v = torch.zeros(1, self.n_neurons, device=self.device)
         else:
@@ -166,30 +168,49 @@ class DrosophilaOpticLobeCircuit(nn.Module):
         
         if return_history:
             history = {'v': [v.clone()], 't': [0]}
-        
+
+        tm1_f = torch.zeros(1, n_tm1, device=self.device)
+        tm1_v = torch.zeros(1, n_tm1, device=self.device)
+        print(range(steps))
         for step in range(steps):
-            tm1_input_step = torch.relu(tm1_input[:, step, :]) # Tm1 rectification
-            v[:, tm1_mask] = tm1_input_step
+
+            x = tm1_input[:, step, :]
+
+            # stage 1: high pass filter
+            hp_out = x - tm1_f
+            tm1_f = tm1_f + self.dt * (x - tm1_f) / self.tm1_tau_hp
+
+            # stage 2: rectification
+            rect_out = torch.relu(hp_out)
+
+            # stage 3: low pass filter
+            v[:, tm1_mask] = tm1_v
+            tm1_v = tm1_v + self.dt * (rect_out - tm1_v) / self.tm1_tau_lp
+           
 
             r = self.activation(v)
             
             source_activities = r[:, self._source_indices]      
             edge_currents = source_activities * scaled_weights  
-            synaptic_input = self.target_sum(edge_currents)     
+            synaptic_input = self.target_sum(edge_currents)  
             
             external_input = torch.zeros_like(v)
-            external_input[:, tm1_mask] = tm1_input_step
+            external_input[:, tm1_mask] = tm1_v
             
             # Dynamics: τ_i * dV_i/dt = -V_i + Σ_j s_ij + Vrest_i + e_i
             # Rearranged: dV_i/dt = (-V_i + Σ_j s_ij + Vrest_i + e_i) / τ_i
             dv = (-v + synaptic_input + vrest.unsqueeze(0) + external_input) / tau.unsqueeze(0)
-            dv[:, tm1_mask] = 0 
-            
+            dv[:, tm1_mask] = 0
+
             v = v + self.dt * dv
-            
+
             if return_history:
                 history['v'].append(v.clone())
                 history['t'].append((step + 1) * self.dt)
+
+            # if steady_state_tol is not None and torch.max(torch.abs(dv)).item() < steady_state_tol:
+            #     break
+
         
         if return_history:
             history['v'] = torch.stack(history['v'], dim=1)

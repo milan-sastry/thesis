@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from visualize import visualize_stimulus_with_tm1_inputs
 import analysis as an
-import grating_visualization as gv
+import tuning_curves as tc
 from bars import generate_bar_response
 from utils import fit_von_mises
 
@@ -25,12 +25,13 @@ DEFAULT_ANGLES         = list(range(0, 180, 15))
 DEFAULT_BAR_WIDTH      = 1.5
 DEFAULT_BAR_LENGTH     = 10.0
 DEFAULT_AMPLITUDE      = 0.9
-DEFAULT_MEAN_DURATION  = 100
 DEFAULT_BAR_DURATION   = 100
-DEFAULT_MEAN_INTENSITY = 0.1
 DEFAULT_SIGMA          = 0.5
-DEFAULT_FLASH_WINDOWS  = (10.0, 20.0)
-DEFAULT_BASELINE       = (0.0, 10.0)
+DEFAULT_YLIM_DM3       = (0.0, 0.6)  # e.g. (-0.1, 1.0); None = matplotlib auto-scale
+DEFAULT_YLIM_TMY       = (0.0, 0.3)  # e.g. (-0.1, 1.0); None = matplotlib auto-scale
+DEFAULT_USE_ALL        = False
+DEFAULT_FIT            = True
+DEFAULT_OUTPUT         = "average_tuning_curves.png"
 
 
 # ---------------------------------------------------------------------------
@@ -45,13 +46,12 @@ def run_average_tuning_curves(
     bar_width=DEFAULT_BAR_WIDTH,
     bar_length=DEFAULT_BAR_LENGTH,
     amplitude=DEFAULT_AMPLITUDE,
-    mean_duration=DEFAULT_MEAN_DURATION,
     bar_duration=DEFAULT_BAR_DURATION,
-    mean_intensity=DEFAULT_MEAN_INTENSITY,
     sigma=DEFAULT_SIGMA,
-    flash_windows=DEFAULT_FLASH_WINDOWS,
-    baseline_window=DEFAULT_BASELINE,
-    model_settings=None,
+    # model_settings=None,
+    model_settings={
+        "remove_reciprocal": False,
+    },
     fit=True,
     fit_period_deg=180.0,
 ):
@@ -74,16 +74,10 @@ def run_average_tuning_curves(
         Gaussian-bar dimensions.
     amplitude : float
         Peak bar intensity.
-    mean_duration, bar_duration : int
-        Number of simulation steps for the baseline and bar phases.
-    mean_intensity : float
-        Background grey level.
+    bar_duration : int
+        Number of simulation steps for the bar stimulus.
     sigma : float
         Gaussian blur width of the bar edge.
-    flash_windows : tuple[float, float]
-        (start, end) of the response window used to compute scores.
-    baseline_window : tuple[float, float]
-        (start, end) of the baseline window.
     model_settings : dict | None
         Extra kwargs forwarded to DrosophilaOpticLobeCircuit (e.g. weight
         scaling, vrest overrides).
@@ -97,7 +91,7 @@ def run_average_tuning_curves(
     type_curves : dict[str, dict]
         ``{type: {"angles", "mean", "sem", "n", "fit"}}`` — same schema as
         ``grating_visualization.tuning_curve``, ready for
-        ``gv.plot_tuning_curves``.
+        ``tc.plot_tuning_curves``.
     neuron_scores : dict[int, dict[float, float]]
         ``{neuron_index: {angle: score}}`` — raw per-neuron scores.
     selected_centers : list[tuple[int, int]]
@@ -152,13 +146,11 @@ def run_average_tuning_curves(
                 flush=True,
             )
 
-            v_final, v_hist, t, bar = generate_bar_response(
+            v_final, _, _, _ = generate_bar_response(
                 angle=angle,
                 width=bar_width,
                 length=bar_length,
                 amplitude=amplitude,
-                mean_duration=mean_duration,
-                mean_intensity=mean_intensity,
                 bar_duration=bar_duration,
                 model_settings=model_settings,
                 center=(p, q),
@@ -170,10 +162,7 @@ def run_average_tuning_curves(
             #         stimulus=bar)
             #     plt.show()
 
-            # compute_flash_scores returns shape (N,) — one score per neuron
-            scores = gv.compute_flash_scores(
-                v_hist, t, flash_windows, baseline_window
-            )
+            scores = tc.compute_steady_state_scores(v_final)
 
             for idx in covered_indices:
                 neuron_scores.setdefault(idx, {})[angle] = float(scores[idx])
@@ -229,34 +218,11 @@ def run_average_tuning_curves(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Compute average bar tuning curves for each cell type."
-    )
-    parser.add_argument(
-        "--target-n", type=int, default=DEFAULT_TARGET_N,
-        help="Number of cells per type to average (default: %(default)s).",
-    )
-    parser.add_argument(
-        "--use-all", action="store_true",
-        help="Cover all available cells instead of a fixed target.",
-    )
-    parser.add_argument(
-        "--output", default="average_tuning_curves.png",
-        help="Output figure filename (default: %(default)s).",
-    )
-    parser.add_argument(
-        "--no-fit", action="store_true",
-        help="Skip von Mises fitting.",
-    )
-    args = parser.parse_args()
-
     type_curves, neuron_scores, selected_centers, per_center_coverage, type_coverage = (
         run_average_tuning_curves(
-            target_n=args.target_n,
-            use_all=args.use_all,
-            fit=not args.no_fit,
+            target_n=DEFAULT_TARGET_N,
+            use_all=DEFAULT_USE_ALL,
+            fit=DEFAULT_FIT,
         )
     )
 
@@ -273,21 +239,25 @@ if __name__ == "__main__":
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-    gv.plot_tuning_curves(type_curves, types=dm3_types, ax=ax1)
+    tc.plot_tuning_curves(type_curves, types=dm3_types, ax=ax1)
     ax1.set_title(
         f"Dm3 Average Tuning Curves  "
-        f"(n={'all' if args.use_all else args.target_n}/type, "
+        f"(n={'all' if DEFAULT_USE_ALL else DEFAULT_TARGET_N}/type, "
         f"{len(selected_centers)} trial centres)"
     )
+    if DEFAULT_YLIM_DM3 is not None:
+        ax1.set_ylim(DEFAULT_YLIM_DM3)
 
-    gv.plot_tuning_curves(type_curves, types=tmy_types, ax=ax2)
+    tc.plot_tuning_curves(type_curves, types=tmy_types, ax=ax2)
     ax2.set_title(
         f"TmY Average Tuning Curves  "
-        f"(n={'all' if args.use_all else args.target_n}/type, "
+        f"(n={'all' if DEFAULT_USE_ALL else DEFAULT_TARGET_N}/type, "
         f"{len(selected_centers)} trial centres)"
     )
+    if DEFAULT_YLIM_TMY is not None:
+        ax2.set_ylim(DEFAULT_YLIM_TMY)
 
     plt.tight_layout()
-    plt.savefig(args.output, dpi=150, bbox_inches="tight")
-    print(f"\nFigure saved to {args.output}")
+    plt.savefig(DEFAULT_OUTPUT, dpi=150, bbox_inches="tight")
+    print(f"\nFigure saved to {DEFAULT_OUTPUT}")
     plt.show()
