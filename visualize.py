@@ -9,6 +9,7 @@ from stimulus import StimulusGenerator
 import analysis as an
 import matplotlib.patches as patches
 from utils import to_numpy, compute_response_metric, pq_to_xy
+from tuning_curves import reconstruct_f1
 import load_weights as lw
 
 try:
@@ -511,6 +512,11 @@ def visualize_responses(
     neuron_indices=None,
     exclude_types=("Tm1",),
     title=None,
+    show_f1_fit=False,
+    temporal_freq=None,
+    grating_onset_t=None,
+    f1_baseline_window=None,
+    f1_analysis_window=None,
 ):
     v_final = to_numpy(v_final)
     history = history or {}
@@ -589,6 +595,11 @@ def visualize_responses(
             ax_tc.set_yticks([])
             continue
 
+        if show_f1_fit and temporal_freq is None:
+            raise ValueError("`temporal_freq` must be provided when show_f1_fit=True.")
+        if show_f1_fit and grating_onset_t is None:
+            raise ValueError("`grating_onset_t` must be provided when show_f1_fit=True.")
+
         for i, (idx, typ) in enumerate(zip(type_indices, type_labels)):
             ax_tc.plot(
                 t_hist,
@@ -597,6 +608,24 @@ def visualize_responses(
                 color=colors[i],
                 linewidth=2,
             )
+            if show_f1_fit:
+                recon = reconstruct_f1(
+                    r_history[0, :, idx],
+                    t_hist,
+                    temporal_freq=temporal_freq,
+                    grating_onset_t=grating_onset_t,
+                    baseline_window=f1_baseline_window,
+                    analysis_window=f1_analysis_window,
+                )
+                ax_tc.plot(
+                    t_hist,
+                    recon,
+                    color=colors[i],
+                    linewidth=1.5,
+                    linestyle="--",
+                    alpha=0.8,
+                    label=f"N{idx} F1 fit",
+                )
 
         ax_tc.set_xlabel("Time")
         ax_tc.set_ylabel("Response r = relu(v)" if use_relu else "Response v")
@@ -616,47 +645,7 @@ def visualize_responses(
     plt.show()
 
 if __name__ == "__main__":
-        centers = {
-            1521: (18.5, 17.0), # Dm3p
-            1685: (18,16.5), # Dm3q
-            972: (18.5, 17.5), # Dm3v
-            2414: (18, 15), # TmY9q
-            2498: (18,17),# TmY9q⊥
-            2168: (17.5, 16.5), # TmY4
-        }
-        angles = [60,120,0,120,30,90]
-        index = 0
-        stimuli = []
-        for cell_id, center in centers.items():
-
-            stim = StimulusGenerator(tm1_coords, neuron_types, row_ids)
-            stimulus = stim.create_sine_grating(
-                angle=angles[index],
-                spatial_frequency=2*np.pi/4,
-                phase=np.pi/2,
-                amplitude=0.75,
-                offset=0.25,
-                center=center,
-            )
-            index+=1
-            stimuli.append(stimulus)
-        save_tm1_inputs_grid(
-            neuron_indices=list(centers.keys()),
-            stimulus_by_neuron=stimuli,
-            overlay=True,
-            output_file="./tm1_inputs/tm1_inputs_with_stimuli.png",
-            ncols=3,
-            overlay_kwargs={
-                "stimulus_cmap": "Greys_r",
-                "tm1_input_cmap": "viridis",
-
-                "base_edge_color": "#B0B0B0",
-                "base_edge_width": 0.5,
-                "input_edge_width_range": (1.0, 4.0),
-                "annotate_pq": False,
-                "clip_stimulus_zero": True,
-            },
-        )
+    visualize_tm1_inputs(2574)
 
 
 

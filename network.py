@@ -7,7 +7,7 @@ class DrosophilaOpticLobeCircuit(nn.Module):
     def __init__(self, neuron_types, source_indices, target_indices, weights, 
                  dt=0.1, tau_init=1.0, device='cpu', remove_reciprocal=False,
                  vrest_init=0.0, tau_by_type=None, vrest_by_type=None, default_scale=1.0,
-                 scale_by_connection_type=None, tm1_tau_hp=6.3, tm1_tau_lp=1.3):
+                 scale_by_connection_type=None, tm1_tau_hp=12.3, tm1_tau_lp=2.3):
         super().__init__()
         self.device = device
         self.dt = dt
@@ -171,7 +171,6 @@ class DrosophilaOpticLobeCircuit(nn.Module):
 
         tm1_f = torch.zeros(1, n_tm1, device=self.device)
         tm1_v = torch.zeros(1, n_tm1, device=self.device)
-        print(range(steps))
         for step in range(steps):
 
             x = tm1_input[:, step, :]

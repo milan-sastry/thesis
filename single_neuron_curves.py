@@ -3,7 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tuning_curves as tc
 import analysis as an
-from grating import generate_grating_response 
+import load_weights as lw
+from grating import generate_grating_response, generate_moving_grating_response
 from bars import generate_bar_response
 from visualize import visualize_stimulus_with_tm1_inputs, visualize_responses
 
@@ -42,8 +43,11 @@ if __name__ == "__main__":
     same_center = [1216,2037,1050,2154,2319,2448]
     shared_center = (25,16)
 
-    neuron_index = 1521
+    neuron_index = 1232
     use_bar = False
+    moving_grating = True
+    n_cycles = 4  # integer cycles within grating_steps — ensures clean FFT / unbiased mean
+    rank_component = "f1"  # which component to rank OSI on: "f0" or "f1"
 
     target_dm3s, _, _, _ = an.get_postsynaptic_targets(neuron_index=neuron_index, include_types=["Dm3p", "Dm3q", "Dm3v"])
     source_tm1s, _, _, _ = an.get_presynaptic_inputs(neuron_index=neuron_index, include_types=["Tm1"])
@@ -52,11 +56,20 @@ if __name__ == "__main__":
 
 
 
-    p_center, q_center = centers[neuron_index]
+    # p_center, q_center = centers[neuron_index]
 
 
     # scale_factors = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
     scale_factors = [1.0]
+
+    dt = 0.1
+    baseline_steps = 0  # default in generate_moving_grating_response
+    grating_steps = 1000
+    grating_onset_t = baseline_steps * dt
+    grating_dur = grating_steps * dt
+    analysis_window = (grating_dur / 5, grating_dur)
+    omega = n_cycles * 2 * np.pi / (grating_steps * dt)
+    temporal_freq = omega / (2 * np.pi)  # = n_cycles / (grating_steps * dt)
 
     for scale_factor in scale_factors:
         scale_by_connection_type = {
@@ -98,7 +111,10 @@ if __name__ == "__main__":
         }
         model_settings = {
             "scale_by_connection_type": scale_by_connection_type,
-            # "vrest_init": -0.1,
+            "vrest_init": -0.1,
+            "tau_by_type": {
+                "Dm3p": 1,
+            }
         }
 
         runs_data = []
@@ -125,15 +141,29 @@ if __name__ == "__main__":
                 #         )
                     
             else:
-                v_final, v_hist, t = generate_grating_response(
-                angle=angle,
-                spatial_frequency=2*np.pi/4,
-                offset=0.25,
-                amplitude=0.75,
-                grating_duration=100,
-                model_settings=model_settings,
-                center=(p_center, q_center)
-            )
+                if moving_grating:
+                    v_final, v_hist, t = generate_moving_grating_response(
+                        model_settings=model_settings,
+                        angle=angle,
+                        spatial_frequency=2*np.pi/4,
+                        n_cycles=n_cycles,
+                        offset=0.5,
+                        amplitude=0.5,
+                        dt=dt,
+                        steps=grating_steps,
+                        baseline_steps=baseline_steps,
+                        # center=(p_center, q_center),
+                    )
+                else:
+                    v_final, v_hist, t = generate_grating_response(
+                    angle=angle,
+                    spatial_frequency=2*np.pi/4,
+                    offset=0.25,
+                    amplitude=0.75,
+                    grating_duration=100,
+                    model_settings=model_settings,
+                    center=(p_center, q_center)
+                )
             runs_data.append({
                 "v_final": v_final,
                 "v_history": v_hist,
@@ -141,21 +171,41 @@ if __name__ == "__main__":
                 "angle": angle,
             })
 
-            visualize_responses(v_final[None, :], {"v": v_hist[None, :, :], "t": t}, neuron_indices=source_tm1s, exclude_types=(),title=f"Bar {angle}°, Scale {scale_factor}")
+            visualize_responses(v_final[None, :], {"v": v_hist[None, :, :], "t": t}, neuron_indices=[neuron_index], show_f1_fit=True, temporal_freq=omega/(2*np.pi), grating_onset_t=grating_onset_t, use_relu=True, exclude_types=(), title=f"Bar {angle}°, Scale {scale_factor}")
 
 
 
         results = {"runs": runs_data}
+        # To rank ALL non-Tm1 neurons by OSI, pass their indices here.
+        # Replace neuron_ids below with all_neuron_ids to rank all neurons.
+        all_neuron_ids = np.where(lw.neuron_types != 'Tm1')[0].tolist()
         curves = tc.tuning_curve(
             results,
             fit=True,
             active_only=False,
+            exclude_types=["Tm1", "TmY4", "TmY9q", "TmY9q⊥", "Dm3q", "Dm3v"],  
+            use_fourier=True,
             aggregation="individual",
-            neuron_ids=[neuron_index], #target_dm3s[:7].tolist() +
+            neuron_ids=all_neuron_ids,  # rank all non-Tm1 neurons
             use_flash=False,
+            temporal_freq=temporal_freq,
+            grating_onset_t=grating_onset_t,
+            response_component="both",  # always compute and display f0 and f1
+            use_relu=True,
+            fwhm=True,
+            #analysis_window=analysis_window,
         )
-        # print(curves)
-        curves_arr.append(curves)
+
+        ranked = tc.rank_neurons_by_key(curves, top_n=10, cell_type_filter=["Dm3p"], sort_by=f"range_osi_{rank_component}")
+        print(f"\n--- Top 10 neurons by OSI_{rank_component} (scale={scale_factor}) ---")
+        for rank, r in enumerate(ranked, 1):
+            osi_f0 = r.get("osi_f0", r["osi"])
+            osi_f1 = r.get("osi_f1", float("nan"))
+            print(f"  {rank:3d}. {r['key']:30s}  OSI_F0={osi_f0:.3f}  OSI_F1={osi_f1:.3f}")
+            print(f"       FWHM: {r['fwhm']}")
+
+        top_keys = [r["key"] for r in ranked]
+        curves_arr.append({k: curves[k] for k in top_keys})
         params_arr.append(scale_factor)
 
     tc.plot_curves_by_param(
@@ -163,6 +213,6 @@ if __name__ == "__main__":
         params_arr,
         filename="flash_bar_Dm3_scaled_individual_1.0.png",
         show_points=True,
-        ylim=(-0.1, 1.0),
+        ylim=(0.0, 0.1),
     )
     plt.show()

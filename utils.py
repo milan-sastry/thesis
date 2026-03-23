@@ -309,6 +309,16 @@ def fit_von_mises(angles_deg, values, period_deg=180.0, n_fit_points=361):
         "y_fit_dense": y_fit_dense,
     }
 
+def fwhm(kappa, period_deg):
+    cos_val = np.log(0.5) / kappa + 1.0
+    if np.ndim(cos_val) == 0:
+        if cos_val < -1.0:
+            return period_deg
+        return period_deg * np.arccos(cos_val) / (2.0 * np.pi)
+    fwhm = np.where(cos_val < -1.0, period_deg, period_deg * np.arccos(np.clip(cos_val, -1.0, 1.0)) / (2.0 * np.pi))
+    hwhm = fwhm / 2.0
+    return (fwhm, hwhm)
+
 
 def compute_pq_vector(angle: float, spatial_frequency: float = 0.1):
     """
@@ -352,7 +362,7 @@ def create_sine_grating(
         if cell_id not in tm1_coords:
             continue
         p, q = tm1_coords[cell_id]
-        grating[idx] = max(0.0, amplitude * np.sin(kp * (p - p0) + kq * (q - q0) + phase) + offset)
+        grating[idx] = amplitude * np.sin(kp * (p - p0) + kq * (q - q0) + phase) + offset
 
     return grating
 

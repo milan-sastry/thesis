@@ -223,19 +223,20 @@ class StimulusGenerator:
     def create_moving_grating_sequence(
         self,
         angle,
+        center=None,
         spatial_frequency=0.1,
         amplitude=1.0,
         offset=0.0,
         phi0=0.0,
-        temporal_freq=2.0,
+        omega=1.0,
         dt=0.1,
         steps=200,
     ):
         frames = []
-        for t_idx in range(steps):
-            t = t_idx * dt
-            phi_t = phi0 - 2 * np.pi * temporal_freq * t
+        for t_step in range(steps):
+            phi_t = phi0 - omega * t_step * dt
             frame = self.create_sine_grating(
+                center=center,
                 angle=angle,
                 spatial_frequency=spatial_frequency,
                 phase=phi_t,
