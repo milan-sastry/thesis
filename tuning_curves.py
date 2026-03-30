@@ -135,7 +135,6 @@ def _compute_fourier_components(v, t_np, temporal_freq, grating_onset_t, baselin
     f = np.arange(nFFT) * (sampling_rate / nFFT)
     idx = int(np.argmin(np.abs(f - temporal_freq)))
     C = (2.0 / nFFT) * Y[idx]  # complex F1 amplitude
-
     return dict(baseline_mean=baseline_mean, f0=f0, C=C, t_ref=t_ref)
 
 def compute_fourier_scores(
@@ -409,6 +408,85 @@ def orientation_selectivity_index(responses, angles):
     osi = np.abs(vector_sum) / np.sum(responses) if np.sum(responses) > 0 else 0.0
     return float(osi)
 
+def plot_polar_tuning_curves(curves, title=None, filename=None):
+    """
+    Plot individual-neuron direction tuning curves on polar axes.
+
+    Each neuron gets its own subplot.  F0 and F1 are overlaid when both are
+    present.  Data points are connected by lines and the loop is closed back
+    to the first angle.
+
+    Parameters
+    ----------
+    curves : dict
+        Output of tuning_curve() with aggregation='individual' and
+        response_component='both' (or 'f0'/'f1').
+        Keys are "<cell_type>#<neuron_index>".
+    title : str, optional
+        Overall figure title.
+    filename : str, optional
+        If given, save the figure to this path.
+
+    Returns
+    -------
+    fig, axes
+    """
+    keys = list(curves.keys())
+    n = len(keys)
+    if n == 0:
+        raise ValueError("curves is empty — nothing to plot.")
+
+    ncols = min(n, 5)
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(
+        nrows, ncols,
+        figsize=(3.2 * ncols, 3.2 * nrows),
+        subplot_kw={"projection": "polar"},
+    )
+    axes_flat = np.array(axes).ravel()
+
+    def _closed(angles_rad, y):
+        """Append the first point to close the polar loop."""
+        return np.append(angles_rad, angles_rad[0]), np.append(y, y[0])
+
+    for ax, key in zip(axes_flat, keys):
+        data = curves[key]
+        angles_deg = np.asarray(data["angles"], dtype=float)
+        order = np.argsort(angles_deg)
+        angles_rad = np.radians(angles_deg[order])
+
+        both_mode = "mean_f1" in data
+        y_f0 = np.asarray(data["mean"], dtype=float)[order]
+        y_f1 = np.asarray(data["mean_f1"], dtype=float)[order] if both_mode else None
+
+        # --- F0 ---
+        th, r = _closed(angles_rad, y_f0)
+        ax.plot(th, r, "o-", markersize=4, linewidth=1.5, label="F0")
+
+        # --- F1 ---
+        if both_mode and y_f1 is not None:
+            th, r = _closed(angles_rad, y_f1)
+            ax.plot(th, r, "s--", markersize=4, linewidth=1.5, label="F1")
+
+        ax.set_title(key, fontsize=7, pad=4)
+        ax.set_theta_zero_location("N")
+        ax.set_theta_direction(-1)
+        ax.grid(True, alpha=0.3)
+        if both_mode:
+            ax.legend(fontsize=6, frameon=False, loc="upper right",
+                      bbox_to_anchor=(1.35, 1.15))
+
+    for ax in axes_flat[n:]:
+        ax.axis("off")
+
+    if title:
+        fig.suptitle(title, y=1.01)
+    fig.tight_layout()
+    if filename:
+        fig.savefig(filename, bbox_inches="tight")
+    return fig, axes
+
+
 def tuning_curve(
     results,
     fit=True,
@@ -428,7 +506,7 @@ def tuning_curve(
     grating_onset_t=None,
     response_component="both",
     use_relu=True,
-    fwhm = True,
+    fwhm=True,
     analysis_window=None,
 ):
     """
@@ -451,7 +529,6 @@ def tuning_curve(
         Which Fourier component to use as the score when use_fourier=True.
         Defaults to 'both', which computes both f0 and f1 and stores them as
         separate fields (mean_f0/mean_f1, fit_f0/fit_f1, osi_f0/osi_f1).
-
     Returns
     -------
     dict
@@ -581,28 +658,36 @@ def tuning_curve(
                 if both_mode:
                     curves[key]["mean_f1"].append(float(scores_at_angle_f1[idx]))
 
+    def _fit(angles, values):
+        if fit_period_deg == 360.0:
+            return utils.fit_double_von_mises(angles, values)
+        return utils.fit_von_mises(angles, values, period_deg=fit_period_deg)
+
+    def _fwhm(fit_result):
+        if not fwhm or fit_result is None:
+            return np.nan
+        if fit_period_deg == 360.0:
+            kappa = fit_result.get("kappa1", fit_result.get("kappa"))
+        else:
+            kappa = fit_result.get("kappa")
+        if kappa is None:
+            return np.nan
+        return utils.fwhm(kappa=kappa, period_deg=fit_period_deg)
+
     for cell_type, data in curves.items():
         data["angles"] = np.asarray(data["angles"], dtype=float)
         data["mean"] = np.asarray(data["mean"], dtype=float)
         data["sem"] = np.asarray(data["sem"], dtype=float)
         data["n"] = np.asarray(data["n"], dtype=int)
-        data["fit"] = (
-            utils.fit_von_mises(data["angles"], data["mean"], period_deg=fit_period_deg)
-            if fit
-            else None
-        )
+        data["fit"] = _fit(data["angles"], data["mean"]) if fit else None
         data["osi"] = orientation_selectivity_index(np.maximum(data["mean"], 0), data["angles"])
-        data["fwhm"] = utils.fwhm(kappa=data["fit"]["kappa"], period_deg=fit_period_deg) if fwhm else np.nan
+        data["fwhm"] = _fwhm(data["fit"])
 
         if both_mode and "mean_f1" in data:
             data["mean_f1"] = np.asarray(data["mean_f1"], dtype=float)
-            data["fit_f1"] = (
-                utils.fit_von_mises(data["angles"], data["mean_f1"], period_deg=fit_period_deg)
-                if fit
-                else None
-            )
+            data["fit_f1"] = _fit(data["angles"], data["mean_f1"]) if fit else None
             data["osi_f1"] = orientation_selectivity_index(np.maximum(data["mean_f1"], 0), data["angles"])
-            data["fwhm_f1"] = utils.fwhm(kappa=data["fit_f1"]["kappa"], period_deg=fit_period_deg) if fwhm else np.nan
+            data["fwhm_f1"] = _fwhm(data["fit_f1"])
             # Aliases for clarity
             data["mean_f0"] = data["mean"]
             data["fit_f0"] = data["fit"]
@@ -692,12 +777,14 @@ def plot_tuning_curves(curves, types=None, show_sem=True, show_fit=True, ax=None
         both_mode = "mean_f1" in data
 
         label_f0 = f"{cell_type} (F0)" if both_mode else cell_type
-        (line,) = ax.plot(x, y, marker="o", linestyle="None", label=label_f0)
+        has_fit = show_fit and data.get("fit") is not None
+        ls = "None" if has_fit else "-"
+        (line,) = ax.plot(x, y, marker="o", linestyle=ls, label=label_f0)
         color = line.get_color()
         if show_sem:
             e = sem[order]
             ax.fill_between(x, y - e, y + e, alpha=0.15, color=color)
-        if show_fit and data.get("fit") is not None:
+        if has_fit:
             fit_data = data["fit"]
             x_fit = np.asarray(fit_data.get("x_fit", x), dtype=float)
             y_fit_dense = np.asarray(fit_data.get("y_fit_dense", fit_data["y_fit"]), dtype=float)
@@ -705,8 +792,10 @@ def plot_tuning_curves(curves, types=None, show_sem=True, show_fit=True, ax=None
 
         if both_mode:
             y_f1 = np.asarray(data["mean_f1"], dtype=float)[order]
-            ax.plot(x, y_f1, marker="s", linestyle="None", color=color, label=f"{cell_type} (F1)")
-            if show_fit and data.get("fit_f1") is not None:
+            has_fit_f1 = show_fit and data.get("fit_f1") is not None
+            ls_f1 = "None" if has_fit_f1 else "-"
+            ax.plot(x, y_f1, marker="s", linestyle=ls_f1, color=color, label=f"{cell_type} (F1)")
+            if has_fit_f1:
                 fit_f1 = data["fit_f1"]
                 x_fit = np.asarray(fit_f1.get("x_fit", x), dtype=float)
                 y_fit_dense = np.asarray(fit_f1.get("y_fit_dense", fit_f1["y_fit"]), dtype=float)
@@ -793,14 +882,40 @@ def plot_curves_by_param(curves_arr, params_arr, types=None, cmap="viridis", fil
                     ax.plot(x, y_f1, linewidth=1.5, linestyle="--", marker="s", alpha=0.9, color=color)
 
         ax.set_title(cell_type)
-        ax.set_xticks([0, 30, 60, 90, 120, 150, 180])
+        ax.set_xticks([0, 60, 120, 180, 240, 300, 360])
         if ylim is None:
             ax.set_ylim(bottom=0.0)
         else:
             ax.set_ylim(bottom=ylim[0], top=ylim[1])
         ax.grid(True, alpha=0.25)
-        # Add F0/F1 legend using proxy artists when both components are shown
+
+        # Add OSI text annotations for each param
         _any_both = any("mean_f1" in curves.get(cell_type, {}) for curves in curves_arr)
+        osi_lines = []
+        for curves, param in zip(curves_arr, params):
+            if cell_type not in curves:
+                continue
+            data = curves[cell_type]
+            osi_f0 = data.get("osi", data.get("osi_f0"))
+            osi_f1 = data.get("osi_f1")
+            color = cmap_obj(norm(float(param)))
+            if _any_both and osi_f0 is not None and osi_f1 is not None:
+                osi_lines.append((f"p={param:g}: OSI F0={osi_f0:.2f}, F1={osi_f1:.2f}", color))
+            elif osi_f0 is not None:
+                osi_lines.append((f"p={param:g}: OSI={osi_f0:.2f}", color))
+
+        # Stack OSI text in top-right corner
+        for i, (text, color) in enumerate(reversed(osi_lines)):
+            ax.text(
+                0.98, 0.98 - i * 0.10,
+                text,
+                transform=ax.transAxes,
+                ha="right", va="top",
+                fontsize=7,
+                color=color,
+            )
+
+        # Add F0/F1 legend using proxy artists when both components are shown
         if _any_both:
             from matplotlib.lines import Line2D
             handles = [

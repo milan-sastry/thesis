@@ -43,7 +43,7 @@ if __name__ == "__main__":
     same_center = [1216,2037,1050,2154,2319,2448]
     shared_center = (25,16)
 
-    neuron_index = 1232
+    neuron_index = 2449
     use_bar = False
     moving_grating = True
     n_cycles = 4  # integer cycles within grating_steps — ensures clean FFT / unbiased mean
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     scale_factors = [1.0]
 
     dt = 0.1
-    baseline_steps = 0  # default in generate_moving_grating_response
+    baseline_steps = 300  # default in generate_moving_grating_response
     grating_steps = 1000
     grating_onset_t = baseline_steps * dt
     grating_dur = grating_steps * dt
@@ -111,14 +111,12 @@ if __name__ == "__main__":
         }
         model_settings = {
             "scale_by_connection_type": scale_by_connection_type,
-            "vrest_init": -0.1,
-            "tau_by_type": {
-                "Dm3p": 1,
-            }
+            "vrest_init": -0.15,
+  
         }
 
         runs_data = []
-        for angle in range(0, 180, 15):
+        for angle in range(0, 360, 30):
             if use_bar:
                 v_final, v_hist, t, bar = generate_bar_response(
                     angle=angle,
@@ -171,19 +169,21 @@ if __name__ == "__main__":
                 "angle": angle,
             })
 
-            visualize_responses(v_final[None, :], {"v": v_hist[None, :, :], "t": t}, neuron_indices=[neuron_index], show_f1_fit=True, temporal_freq=omega/(2*np.pi), grating_onset_t=grating_onset_t, use_relu=True, exclude_types=(), title=f"Bar {angle}°, Scale {scale_factor}")
+            visualize_responses(v_final[None, :], {"v": v_hist[None, :, :], "t": t}, neuron_indices=[20], show_f1_fit=True, temporal_freq=omega/(2*np.pi), grating_onset_t=grating_onset_t, use_relu=True, exclude_types=(), title=f"Bar {angle}°, Scale {scale_factor}")
 
 
 
         results = {"runs": runs_data}
         # To rank ALL non-Tm1 neurons by OSI, pass their indices here.
         # Replace neuron_ids below with all_neuron_ids to rank all neurons.
-        all_neuron_ids = np.where(lw.neuron_types != 'Tm1')[0].tolist()
+        type = 'TmY9q⊥'
+        all_neuron_ids = np.where(lw.neuron_types == type)[0].tolist()
         curves = tc.tuning_curve(
             results,
-            fit=True,
+            fit=False,
+            fit_period_deg=360.0,
             active_only=False,
-            exclude_types=["Tm1", "TmY4", "TmY9q", "TmY9q⊥", "Dm3q", "Dm3v"],  
+            exclude_types=["Tm1", "TmY4", "TmY9q", "TmY9q⊥", "Dm3q", "Dm3v"],
             use_fourier=True,
             aggregation="individual",
             neuron_ids=all_neuron_ids,  # rank all non-Tm1 neurons
@@ -196,7 +196,7 @@ if __name__ == "__main__":
             #analysis_window=analysis_window,
         )
 
-        ranked = tc.rank_neurons_by_key(curves, top_n=10, cell_type_filter=["Dm3p"], sort_by=f"range_osi_{rank_component}")
+        ranked = tc.rank_neurons_by_key(curves, top_n=10, cell_type_filter=[type], sort_by=f"range_{rank_component}")
         print(f"\n--- Top 10 neurons by OSI_{rank_component} (scale={scale_factor}) ---")
         for rank, r in enumerate(ranked, 1):
             osi_f0 = r.get("osi_f0", r["osi"])
@@ -213,6 +213,13 @@ if __name__ == "__main__":
         params_arr,
         filename="flash_bar_Dm3_scaled_individual_1.0.png",
         show_points=True,
-        ylim=(0.0, 0.1),
+        # ylim=(0.0, 0.1),
     )
+
+    # Polar plots for top-N neurons only (last scale factor's ranking)
+    top_curves = curves_arr[-1]
+    # tc.plot_polar_tuning_curves(
+    #     top_curves,
+    #     title=f"Direction tuning — top {len(top_curves)} neurons (scale={params_arr[-1]})",
+    # )
     plt.show()

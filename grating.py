@@ -121,11 +121,14 @@ def generate_moving_grating_response(
 
         stimulus = stimulus_generator.to_torch(sequence)
         model_kwargs = filter_model_kwargs(model_settings)
+        tm1_row_ids = lw.row_ids[lw.neuron_types == 'Tm1']
         model = DrosophilaOpticLobeCircuit(
             lw.neuron_types,
             lw.source_indices,
             lw.target_indices,
             lw.weights,
+            tm1_coords=lw.tm1_coords,
+            tm1_row_ids=tm1_row_ids,
             **model_kwargs,
         )
         v_final, history = model(stimulus, return_history=True)

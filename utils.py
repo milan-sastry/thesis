@@ -263,6 +263,73 @@ def _von_mises_deg(theta_deg, baseline, amplitude, kappa, mu_deg, period_deg):
     delta = 2.0 * np.pi * (theta_deg - mu_deg) / period_deg
     return baseline + amplitude * np.exp(kappa * (np.cos(delta) - 1.0))
 
+
+def _double_von_mises_deg(theta_deg, baseline, amplitude1, kappa1, mu_deg, amplitude2, kappa2):
+    """Sum of two von Mises functions on a 0-360 degree circle.
+    The second component is centred 180° opposite the first (null direction).
+    """
+    delta1 = np.radians(theta_deg - mu_deg)
+    delta2 = np.radians(theta_deg - (mu_deg + 180.0))
+    return (
+        baseline
+        + amplitude1 * np.exp(kappa1 * (np.cos(delta1) - 1.0))
+        + amplitude2 * np.exp(kappa2 * (np.cos(delta2) - 1.0))
+    )
+
+
+def fit_double_von_mises(angles_deg, values, n_fit_points=361):
+    """
+    Fit a sum of two von Mises functions to a 0-360 direction tuning curve.
+
+    The preferred direction (mu) is shared; the null direction is mu + 180°.
+    Each component has an independent amplitude and concentration (kappa).
+
+    Returns dict with fitted params, y at data angles, and smooth fit curve,
+    or None on failure.
+    """
+    x = np.asarray(angles_deg, dtype=float).reshape(-1)
+    y = np.asarray(values, dtype=float).reshape(-1)
+    if x.size != y.size or x.size < 6:
+        return None
+
+    mu_guess = float(x[np.argmax(y)])
+    amp_guess = float(np.ptp(y))
+    p0 = [float(np.min(y)), amp_guess, 1.0, mu_guess, amp_guess * 0.5, 1.0]
+    bounds = (
+        [-np.inf, 0.0, 0.0,   0.0, 0.0, 0.0],
+        [ np.inf, np.inf, 50.0, 360.0, np.inf, 50.0],
+    )
+    try:
+        popt, _ = curve_fit(
+            _double_von_mises_deg,
+            x,
+            y,
+            p0=p0,
+            bounds=bounds,
+            maxfev=20000,
+        )
+    except Exception:
+        return None
+
+    baseline, amplitude1, kappa1, mu_deg, amplitude2, kappa2 = popt
+    mu_deg = float(mu_deg % 360.0)
+    x_fit = np.linspace(0.0, 360.0, int(n_fit_points))
+    y_fit = _double_von_mises_deg(x, baseline, amplitude1, kappa1, mu_deg, amplitude2, kappa2)
+    y_fit_dense = _double_von_mises_deg(x_fit, baseline, amplitude1, kappa1, mu_deg, amplitude2, kappa2)
+    return {
+        "baseline": float(baseline),
+        "amplitude1": float(amplitude1),
+        "kappa1": float(kappa1),
+        "mu_deg": mu_deg,
+        "amplitude2": float(amplitude2),
+        "kappa2": float(kappa2),
+        "period_deg": 360.0,
+        "x_fit": x_fit,
+        "y_fit": y_fit,
+        "y_fit_dense": y_fit_dense,
+    }
+
+
 def fit_von_mises(angles_deg, values, period_deg=180.0, n_fit_points=361):
     """
     Von Mises fit for tuning curves.

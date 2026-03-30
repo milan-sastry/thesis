@@ -1,18 +1,23 @@
 
 import torch
 import torch.nn as nn
+import numpy as np
 from utils import remove_reciprocal_connections, to_numpy
 class DrosophilaOpticLobeCircuit(nn.Module):
 
-    def __init__(self, neuron_types, source_indices, target_indices, weights, 
+    def __init__(self, neuron_types, source_indices, target_indices, weights,
                  dt=0.1, tau_init=1.0, device='cpu', remove_reciprocal=False,
                  vrest_init=0.0, tau_by_type=None, vrest_by_type=None, default_scale=1.0,
-                 scale_by_connection_type=None, tm1_tau_hp=12.3, tm1_tau_lp=2.3):
+                 scale_by_connection_type=None, tm1_tau_hp=12.3, tm1_tau_lp=2.3,
+                 fwhm_cen=8.12, fwhm_sur=27.14, A_rel=0.04, tm1_coords=None, tm1_row_ids=None):
         super().__init__()
         self.device = device
         self.dt = dt
         self.tm1_tau_hp = tm1_tau_hp
         self.tm1_tau_lp = tm1_tau_lp
+        self.tm1_sigma_c = (fwhm_cen / 5.5) / (2*np.sqrt(2 * np.log(2)))  # Convert FWHM to sigma, roughly 5.0 degrees per ommatidia
+        self.tm1_sigma_s = (fwhm_sur / 5.5) / (2*np.sqrt(2 * np.log(2)))
+        self.A_rel = A_rel
         if remove_reciprocal:
             self._source_indices, self._target_indices, self._weights = remove_reciprocal_connections(
                 source_indices, target_indices, weights, neuron_types
@@ -88,7 +93,49 @@ class DrosophilaOpticLobeCircuit(nn.Module):
             (source_types_array[i], target_types_array[i])
             for i in range(len(source_types_array))
         ]
-        
+
+        # Pre-compute spatial DoG filter matrix for Tm1 cells
+        if tm1_coords is not None:
+            raw = np.array(tm1_coords)  # preserve original dtype (int64 for cell IDs)
+            n_tm1_local = self.n_per_type['Tm1']
+
+            if raw.ndim == 2 and raw.shape[1] == 3:
+                # Raw format: each row is (cell_id, p, q); need tm1_row_ids to map to Tm1-local indices
+                if tm1_row_ids is None:
+                    raise ValueError("tm1_row_ids must be provided when tm1_coords has 3 columns (cell_id, p, q)")
+                # Keep cell IDs as int64 to avoid float32 precision loss on large IDs
+                cell_ids = raw[:, 0].astype(np.int64)
+                coord_dict = {int(cid): (float(raw[i, 1]), float(raw[i, 2]))
+                              for i, cid in enumerate(cell_ids)}
+                p_arr = np.array([coord_dict[int(cid)][0] if int(cid) in coord_dict else np.nan
+                                  for cid in tm1_row_ids], dtype=np.float32)
+                q_arr = np.array([coord_dict[int(cid)][1] if int(cid) in coord_dict else np.nan
+                                  for cid in tm1_row_ids], dtype=np.float32)
+            else:
+                # Full format: [n_tm1, 2] with (p, q) for each cell in network order
+                pq_arr = raw.astype(np.float32)
+                p_arr, q_arr = pq_arr[:, 0], pq_arr[:, 1]
+
+            # Only compute DoG for cells that have coordinates; missing cells get identity rows
+            has_coord = ~np.isnan(p_arr)
+            valid_idx = np.where(has_coord)[0]
+
+            x_v = q_arr[valid_idx] - p_arr[valid_idx]
+            y_v = (p_arr[valid_idx] + q_arr[valid_idx]) / np.sqrt(3)
+            xy_v = np.stack([x_v, y_v], axis=1)  # [n_valid, 2]
+
+            diff = xy_v[:, None, :] - xy_v[None, :, :]  # [n_valid, n_valid, 2]
+            r2 = (diff ** 2).sum(axis=2)              # [n_valid, n_valid]
+            H_sub = np.exp(-r2 / (2 * self.tm1_sigma_c ** 2)) - self.A_rel * np.exp(-r2 / (2 * self.tm1_sigma_s ** 2))
+
+            # Embed sub-matrix into a full identity; missing cells pass through unchanged
+            H = np.eye(n_tm1_local, dtype=np.float32)
+            H[np.ix_(valid_idx, valid_idx)] = H_sub
+
+            self.tm1_H = torch.tensor(H, dtype=torch.float32, device=device)
+        else:
+            self.tm1_H = None
+
     def get_tau_vector(self):
         """Get tau vector with values per neuron type."""
         tau = torch.zeros(self.n_neurons, device=self.device)
@@ -174,6 +221,10 @@ class DrosophilaOpticLobeCircuit(nn.Module):
         for step in range(steps):
 
             x = tm1_input[:, step, :]
+
+            # stage 0: spatial DoG filter (center-surround)
+            if self.tm1_H is not None:
+                x = (x @ self.tm1_H.T)
 
             # stage 1: high pass filter
             hp_out = x - tm1_f
