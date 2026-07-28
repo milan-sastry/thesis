@@ -141,7 +141,7 @@ class StimulusGenerator:
         ax.set_ylim(3, 40)
         ax.set_ylabel('Dorsal (v)')
         ax.set_title(title)
-        ax.grid(True, linestyle='--', color='grey', which='both', linewidth=0.5, alpha=0.5)
+        ax.grid(visible=False, linestyle='none', color='grey', which='both', linewidth=0.5, alpha=0.5)
 
 
         return fig, ax, scatter
@@ -274,3 +274,4 @@ class StimulusGenerator:
 
         return tensor.to(device)
     
+

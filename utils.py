@@ -434,7 +434,7 @@ def create_sine_grating(
     return grating
 
 
-def remove_reciprocal_connections(source_indices, target_indices, weights, neuron_types):
+def remove_lateral_connections(source_indices, target_indices, weights, neuron_types):
     """
     Filter edges to only keep those with Tm1 as the source type.
     """

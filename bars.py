@@ -337,113 +337,161 @@ def generate_bar_response(
     return v_final_np, v_hist_np, t_np, bar
 
 
-# if __name__ == "__main__":
-    # scale_factors = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
-    # curves_arr = []
-    # params_arr = []
+if __name__ == "__main__":
+    # --- Lengthwise-extending bar over a central TmY4 cell ---
+    # Bar is oriented at 90° (TmY4 preferred orientation) and extends symmetrically
+    # from a short stub to a long bar. We track nearby TmY4 cells over time.
 
-    # centers = {
-    #     1521: (18.5, 17.0), # Dm3p
-    #     1685: (18,16.5), # Dm3q
-    #     972: (18.5, 17.5), # Dm3v
-    #     2414: (18, 15), # TmY9q
-    #     2498: (18,17),# TmY9q⊥
-    #     2168: (17.5, 16.5), # TmY4
-        
-        
-    #     1481: (10.5,18), # Dm3p with most total TmY9q⊥ inputs
-    #     1456: (11,10), # Dm3p with large number of Tmy9q⊥ inputs and high total after normalization
-    #     1559: (21,15), # Dm3p with most unique TmY9q⊥ inputs
-    #     982: (20,14.5), # Dm3v with second most total TmY9q⊥ inputs
-    #     962: (10,12), # Dm3v with most unique TmY9q⊥ inputs
-    #     2452: (13,6), # TmY9q⊥ -- most synapses to Dm3v + Dm3p
-    #     2608: (11,18.5), #Tmy9q⊥ -- many synapses to Dm3p
-    #     2547: (14,12.5), #Tmy9q⊥ -- many incoming synapses from TmY9q
+    # Parameters
+    ANGLE = 90.0          # TmY4 preferred orientation
+    BAR_WIDTH = 1.5
+    BASE_LENGTH = 1.0     # starting length (short stub)
+    FINAL_LENGTH = 16.0   # final length after full extension
+    INTENSITY = 0.9
+    SIGMA = 0.5
+    DT = 0.1              # model timestep (s)
+    GRAY_DURATION = 50    # baseline frames before bar appears
+    EXTENSION_STEPS = 150 # frames for the extension phase
+    HOLD_STEPS = 50       # frames to hold fully-extended bar
 
+    # Pick the center TmY4 cell and find its RF center
+    center_tmy4_idx = 2168
+    p_center, q_center = an.get_rf_center(center_tmy4_idx)
+    print(f"TmY4 index {center_tmy4_idx}: RF center = ({p_center}, {q_center})")
 
-    # }
+    # ---- Build stimulus ------------------------------------------------
+    stim_gen = StimulusGenerator(lw.tm1_coords, lw.neuron_types, lw.row_ids)
 
-    # neuron_index = 2547
-    # p_center, q_center = centers[neuron_index]
-    # input_indices, input_cell_ids, input_types, input_synapse_counts = an.get_presynaptic_inputs(neuron_index)
-    # output_indices, output_cell_ids, output_types, output_synapse_counts = an.get_postsynaptic_targets(neuron_index)
+    # Gray baseline
+    gray = stim_gen.create_mean_gray(intensity=0.0)
+    gray_frames = np.repeat(gray[None, :], GRAY_DURATION, axis=0)
 
-    # dm3v_indices = output_indices[np.where(output_types == "Dm3v")[0]]
-    # dm3p_indices = output_indices[np.where(output_types == "Dm3p")[0]]
-    # print(dm3p_indices)
+    # Extending bar (center fixed, lengthwise growth)
+    extension_duration = EXTENSION_STEPS * DT   # seconds
+    hold_duration = HOLD_STEPS * DT
+    ext_frames = extending_bar(
+        angle=ANGLE,
+        base_width=BAR_WIDTH,
+        base_length=BASE_LENGTH,
+        final_length=FINAL_LENGTH,
+        extend_axis="lengthwise",
+        intensity=INTENSITY,
+        p_center=p_center,
+        q_center=q_center,
+        extension_duration=extension_duration,
+        dt=DT,
+        sigma=SIGMA,
+        hold_final_duration=hold_duration,
+    )
 
+    stimulus = np.vstack([gray_frames, ext_frames])
+    stimulus_t = stim_gen.to_torch(stimulus)
 
+    # ---- Run model -------------------------------------------------------
+    model = DrosophilaOpticLobeCircuit(
+        lw.neuron_types,
+        lw.source_indices,
+        lw.target_indices,
+        lw.weights,
+        dt=DT,
+    )
+    _, history = model(stimulus_t, return_history=True)
+    v_hist = to_numpy(history["v"].squeeze(0), dtype=np.float32)  # (steps, n_neurons)
+    t_arr  = to_numpy(history["t"], dtype=np.float32)             # (steps,)
 
-    # for scale_factor in scale_factors:
-    #     scale_by_connection_type = {
-    #         # ('Dm3p', 'Dm3v'): scale_factor,
-    #         # ('Dm3q', 'Dm3v'): scale_factor,
-    #         # ('Dm3p', 'Dm3q'): scale_factor,
-    #         # ('Dm3q', 'Dm3p'): scale_factor,
-    #         # ('Dm3v', 'Dm3p'): scale_factor,
-    #         # ('Dm3v', 'Dm3q'): scale_factor, 
-    #         # ('Dm3p', 'Dm3p'): scale_factor,
-    #         # ('Dm3q', 'Dm3q'): scale_factor,
-    #         # ('Dm3v', 'Dm3v'): scale_factor,
-    #         # ('Dm3v', 'TmY4'): scale_factor,
-    #         # ('Dm3p', 'TmY9q'): scale_factor,
-    #         # ('Dm3q', 'TmY9q⊥'): scale_factor,
-    #         # ('Dm3v', 'TmY9q'): scale_factor,
-    #         # ('Dm3q', 'TmY9q'): scale_factor,
-    #         # ('Dm3v', 'TmY9q⊥'): scale_factor,
-    #         # ('Dm3p', 'TmY4'): scale_factor,
-    #         # ('Dm3q', 'TmY4'): scale_factor,
-    #         # ('Dm3p', 'TmY9q⊥'): scale_factor,
-    #         # ('TmY9q⊥', 'Dm3p') : scale_factor,
-    #         # ('TmY9q⊥', 'Dm3v') : scale_factor,
-    #         ('TmY9q', 'TmY9q⊥') : scale_factor,
-    #     }
-    #     model_settings = {
-    #         "scale_by_connection_type": scale_by_connection_type,
-    #         # "vrest_init": -0.1,
-    #     }
+    # ---- Find TmY4 cells along the bar axis ------------------------------
+    # Collect all TmY4 cells whose Tm1 inputs place them inside the final bar
+    tmy4_in_bar = find_cells_in_bar(
+        angle=ANGLE,
+        width=BAR_WIDTH + 1.0,   # a bit generous in width
+        length=FINAL_LENGTH,
+        p_center=p_center,
+        q_center=q_center,
+        types=["TmY4"],
+    )
+    print(f"TmY4 cells inside final bar: {len(tmy4_in_bar)}")
 
-    #     runs_data = []
-    #     for angle in range(0, 180, 15):
-    #         v_final, v_hist, t = generate_bar_response(
-    #             angle=angle,
-    #             width=1.5,
-    #             length=20.0,
-    #             amplitude=0.9,
-    #             mean_duration=100,
-    #             mean_intensity=0.1,
-    #             bar_duration=100,
-    #             model_settings=model_settings,
-    #             center=(p_center, q_center),
-    #             sigma=0.5,
-    #         )
-    #         runs_data.append({
-    #             "v_final": v_final,
-    #             "v_history": v_hist,
-    #             "t": t,
-    #             "angle": angle,
-    #         })
-    #         #visualize_responses(v_final[None, :], {"v": v_hist[None, :, :], "t": t}, neuron_indices=[neuron_index], title=f"Bar {angle}°, Scale {scale_factor}")
+    if not tmy4_in_bar:
+        raise RuntimeError("No TmY4 cells found inside the bar — check center or bar dimensions.")
 
+    # Compute each cell's signed distance along the bar axis from the center
+    center_x, center_y = pq_to_xy(p_center, q_center)
+    theta = np.radians(ANGLE)
+    cos_t, sin_t = np.cos(theta), np.sin(theta)
 
-    #     results = {"runs": runs_data}
-    #     curves = tc.tuning_curve(
-    #         results,
-    #         flash_windows=(10, 20.0),
-    #         baseline_window=(0, 10.0),
-    #         fit=True,
-    #         active_only=False,
-    #         aggregation="individual",
-    #         neuron_ids=[neuron_index],
-    #     )
-    #     curves_arr.append(curves)
-    #     params_arr.append(scale_factor)
+    # axis_dist > 0 → "above" center along bar length axis, < 0 → "below"
+    def axis_distance(neuron_idx):
+        cp, cq = an.get_rf_center(neuron_idx)
+        if cp is None:
+            return None
+        cx, cy = pq_to_xy(cp, cq)
+        dx, dy = cx - center_x, cy - center_y
+        # In create_gaussian_bar: x_local = dx*cos + dy*sin  (width axis)
+        #                         y_local = -dx*sin + dy*cos  (length axis)
+        return float(-dx * sin_t + dy * cos_t)
 
-    # tc.plot_curves_by_param(
-    #     curves_arr,
-    #     params_arr,
-    #     filename="flash_bar_Dm3_scaled_individual_1.0.png",
-    #     show_points=True,
-    #     ylim=(0.0, 0.6),
-    # )
-    # plt.show()
+    # Attach distances and sort by absolute distance (center-most first)
+    cells_with_dist = []
+    for idx in tmy4_in_bar:
+        d = axis_distance(idx)
+        if d is not None:
+            cells_with_dist.append((idx, d))
+
+    cells_with_dist.sort(key=lambda x: abs(x[1]))
+
+    # Keep cells within ±FINAL_LENGTH/2 and limit to ≤12 for clarity
+    cells_with_dist = [(i, d) for i, d in cells_with_dist if abs(d) <= FINAL_LENGTH / 2]
+    cells_with_dist = cells_with_dist[:12]
+
+    print("TmY4 cells selected (sorted by |axis dist| from center):")
+    for idx, d in cells_with_dist:
+        print(f"  global idx {idx:5d}  cell_id {lw.row_ids[idx]:6d}  axis_dist={d:+.2f}")
+
+    # ---- Plot: activity vs time, colored by distance from center ---------
+    cmap = plt.cm.coolwarm
+    max_abs_d = max(abs(d) for _, d in cells_with_dist) if cells_with_dist else 1.0
+
+    fig, axes = plt.subplots(2, 1, figsize=(12, 8),
+                             gridspec_kw={"height_ratios": [3, 1]})
+    ax_act, ax_len = axes
+
+    # Top panel: activity time courses
+    for idx, d in cells_with_dist:
+        color = cmap(0.5 + 0.5 * d / max_abs_d)  # extremes → red/blue, centre → white
+        ax_act.plot(t_arr, v_hist[:, idx], color=color, lw=1.2, label=f"d={d:+.1f}")
+
+    # Shade the three stimulus phases
+    t_bar_on  = GRAY_DURATION * DT
+    t_bar_end = t_bar_on + extension_duration
+    ax_act.axvspan(0,          t_bar_on,  alpha=0.08, color="grey",  label="baseline")
+    ax_act.axvspan(t_bar_on,   t_bar_end, alpha=0.08, color="green", label="extension")
+    ax_act.axvspan(t_bar_end,  t_arr[-1], alpha=0.08, color="blue",  label="hold")
+    ax_act.set_xlim(t_arr[0], t_arr[-1])
+    ax_act.set_ylabel("Voltage (a.u.)")
+    ax_act.set_title(
+        f"TmY4 activity near bar centre during lengthwise extension\n"
+        f"angle={ANGLE}°, center=({p_center},{q_center}), "
+        f"length {BASE_LENGTH}→{FINAL_LENGTH}"
+    )
+    ax_act.legend(loc="upper left", fontsize=7, ncol=2, title="Axis dist from centre")
+
+    # Bottom panel: bar length over time
+    n_ext = ext_frames.shape[0]
+    t_ext = t_bar_on + np.arange(n_ext) * DT
+    lengths = np.concatenate([
+        np.linspace(BASE_LENGTH, FINAL_LENGTH, EXTENSION_STEPS),
+        np.full(HOLD_STEPS, FINAL_LENGTH),
+    ])
+    ax_len.plot(t_ext, lengths[:n_ext], color="black", lw=1.5)
+    ax_len.set_xlim(t_arr[0], t_arr[-1])
+    ax_len.set_xlabel("Time (s)")
+    ax_len.set_ylabel("Bar length")
+    ax_len.set_title("Bar length over time")
+
+    plt.tight_layout()
+    import os
+    os.makedirs("extending_bar", exist_ok=True)
+    out_path = "extending_bar/extending_bar_TmY4_activity.png"
+    plt.savefig(out_path, dpi=150)
+    print(f"Saved to {out_path}")
+    plt.show()

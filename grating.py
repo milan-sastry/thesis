@@ -77,6 +77,8 @@ def generate_moving_grating_response(
     steps=200,
     baseline_steps=50,
     model_settings=None,
+    cross_orientation=False,
+    cross_orientation_angle=None,
     ):
         """
         Parameters
@@ -112,12 +114,26 @@ def generate_moving_grating_response(
             dt=dt,
             steps=steps,
         )
+        if cross_orientation and cross_orientation_angle is not None:
+            cross_grating = stimulus_generator.create_moving_grating_sequence(
+                angle=cross_orientation_angle,
+                center=center,
+                spatial_frequency=spatial_frequency,
+                amplitude=amplitude,
+                offset=offset,
+                phi0=phase0,
+                omega=omega,
+                dt=dt,
+                steps=steps,
+            )
+            grating = (grating + cross_grating) / 2
 
         mean_gray = stimulus_generator.create_mean_gray(intensity=offset)
         baseline = stimulus_generator.sequence_from_blocks([(mean_gray, baseline_steps)])
         sequence = np.concatenate([baseline, grating], axis=0)
-        # stimulus_generator.visualize_sequence(sequence)
-        # plt.show()
+        # if angle== 90:
+        #     stimulus_generator.visualize_sequence(sequence)
+        #     plt.show()
 
         stimulus = stimulus_generator.to_torch(sequence)
         model_kwargs = filter_model_kwargs(model_settings)
@@ -143,8 +159,8 @@ if __name__ == "__main__":
         lw.neuron_types,
         lw.row_ids)
     sequence = stimGen.create_moving_grating_sequence(
-        angle=60,
-        spatial_frequency=np.pi/2,
+        angle=90,
+        spatial_frequency=2*np.pi/(6.5*2/np.sqrt(3)),
         amplitude=0.5,
         offset=0.5,
         phi0=np.pi/2,

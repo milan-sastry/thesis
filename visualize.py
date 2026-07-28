@@ -627,7 +627,7 @@ def visualize_responses(
                     label=f"N{idx} F1 fit",
                 )
 
-        ax_tc.set_xlabel("Time")
+        ax_tc.set_xlabel("Time (deciseconds)")
         ax_tc.set_ylabel("Response r = relu(v)" if use_relu else "Response v")
         if title:
             ax_tc.set_title(f"Time Courses - {cell_type}, {title}")
@@ -645,7 +645,7 @@ def visualize_responses(
     plt.show()
 
 if __name__ == "__main__":
-    visualize_tm1_inputs(2574)
+    visualize_tm1_inputs(2409)
 
 
 

@@ -408,6 +408,40 @@ def orientation_selectivity_index(responses, angles):
     osi = np.abs(vector_sum) / np.sum(responses) if np.sum(responses) > 0 else 0.0
     return float(osi)
 
+
+def classical_orientation_selectivity_index(responses, angles):
+    """
+    Classical OSI: (R_pref - R_orth) / (R_pref + R_orth).
+
+    R_pref is the response at the preferred angle (argmax).
+    R_orth is the response at the angle closest to preferred + 90°.
+
+    Parameters
+    ----------
+    responses : array-like, shape (N,)
+        Response values (non-negative) at each angle.
+    angles : array-like, shape (N,)
+        Angles in degrees, same order as responses.
+
+    Returns
+    -------
+    osi : float
+        Classical OSI in [0, 1], or 0 if R_pref + R_orth == 0.
+    """
+    responses = np.asarray(responses, dtype=float)
+    angles = np.asarray(angles, dtype=float)
+    pref_idx = int(np.argmax(responses))
+    pref_angle = angles[pref_idx]
+    orth_angle = (pref_angle + 90.0) % 360.0
+    # find closest sampled angle to orth_angle
+    diffs = np.abs(((angles - orth_angle + 180.0) % 360.0) - 180.0)
+    orth_idx = int(np.argmin(diffs))
+    r_pref = float(responses[pref_idx])
+    r_orth = float(responses[orth_idx])
+    denom = r_pref + r_orth
+    return float((r_pref - r_orth) / denom) if denom > 0 else 0.0
+
+
 def plot_polar_tuning_curves(curves, title=None, filename=None):
     """
     Plot individual-neuron direction tuning curves on polar axes.
@@ -444,6 +478,7 @@ def plot_polar_tuning_curves(curves, title=None, filename=None):
         subplot_kw={"projection": "polar"},
     )
     axes_flat = np.array(axes).ravel()
+    rlabel_rots = []
 
     def _closed(angles_rad, y):
         """Append the first point to close the polar loop."""
@@ -475,6 +510,15 @@ def plot_polar_tuning_curves(curves, title=None, filename=None):
         if both_mode:
             ax.legend(fontsize=6, frameon=False, loc="upper right",
                       bbox_to_anchor=(1.35, 1.15))
+        y_for_pref = y_f1 if (both_mode and y_f1 is not None) else y_f0
+        pref_angle_deg = float(angles_deg[order][np.argmax(y_for_pref)])
+        label_angle = (pref_angle_deg + 90) % 360
+        ax.set_rlabel_position(label_angle)
+        rot = (90 - pref_angle_deg) % 180
+        if rot > 90:
+            rot -= 180
+        rot = round(rot / 45) * 45
+        rlabel_rots.append((ax, rot))
 
     for ax in axes_flat[n:]:
         ax.axis("off")
@@ -482,9 +526,149 @@ def plot_polar_tuning_curves(curves, title=None, filename=None):
     if title:
         fig.suptitle(title, y=1.01)
     fig.tight_layout()
+    for ax, rot in rlabel_rots:
+        ax.tick_params(axis='y', labelrotation=rot)
     if filename:
         fig.savefig(filename, bbox_inches="tight")
     return fig, axes
+
+
+def plot_representative_curves_with_polar(curves, scale_factor=None, title=None, filename=None):
+    """
+    Plot representative tuning curves with polar plots directly below.
+
+    Top row: Cartesian tuning curves (F0 and F1 overlaid).
+    Bottom row: Corresponding polar plots.
+
+    One column per neuron in `curves`.
+
+    Parameters
+    ----------
+    curves : dict
+        Output of tuning_curve() with aggregation='individual' and
+        response_component='both' (or 'f0'/'f1').
+    scale_factor : float, optional
+        Shown in the figure title if provided.
+    title : str, optional
+        Override the default figure title.
+    filename : str, optional
+        If given, save the figure to this path.
+
+    Returns
+    -------
+    fig
+    """
+    keys = list(curves.keys())
+    n = len(keys)
+    if n == 0:
+        raise ValueError("curves is empty — nothing to plot.")
+
+    ncols = n
+    fig = plt.figure(figsize=(4.5 * ncols, 8.0))
+
+    # Top row: regular Cartesian axes
+    cart_axes = []
+    for col, key in enumerate(keys):
+        ax = fig.add_subplot(2, ncols, col + 1)
+        cart_axes.append(ax)
+
+        data = curves[key]
+        angles = np.asarray(data["angles"], dtype=float)
+        order = np.argsort(angles)
+        x = angles[order]
+        both_mode = "mean_f1" in data
+
+        y_f0 = np.asarray(data["mean"], dtype=float)[order]
+        ax.plot(x, y_f0, "o-", linewidth=1.5, markersize=4, label="F0")
+
+        if both_mode:
+            y_f1 = np.asarray(data["mean_f1"], dtype=float)[order]
+            ax.plot(x, y_f1, "s--", linewidth=1.5, markersize=4, label="F1")
+
+        ax.set_title(key, fontsize=8)
+        ax.set_xticks([0, 60, 120, 180, 240, 300, 360])
+        ax.set_xlabel("Angle (deg)", fontsize=7)
+        ax.set_ylabel("Score", fontsize=7)
+        ax.set_ylim(bottom=0.0)
+        ax.grid(True, alpha=0.25)
+
+        if both_mode:
+            from matplotlib.lines import Line2D
+            handles = [
+                Line2D([0], [0], linewidth=1.5, linestyle="-", color="gray", label="F0"),
+                Line2D([0], [0], linewidth=1.5, linestyle="--", color="gray", label="F1"),
+            ]
+            ax.legend(handles=handles, frameon=False, fontsize=7)
+
+        # OSI annotations
+        osi_f0 = data.get("osi", data.get("osi_f0"))
+        osi_f1 = data.get("osi_f1")
+        c_osi_f0 = data.get("classical_osi", data.get("classical_osi_f0"))
+        c_osi_f1 = data.get("classical_osi_f1")
+        if both_mode and osi_f0 is not None and osi_f1 is not None:
+            lines = [f"OSI F0={osi_f0:.2f}  F1={osi_f1:.2f}"]
+            if c_osi_f0 is not None and c_osi_f1 is not None:
+                lines.append(f"cOSI F0={c_osi_f0:.2f}  F1={c_osi_f1:.2f}")
+            ax.text(0.98, 0.98, "\n".join(lines),
+                    transform=ax.transAxes, ha="right", va="top", fontsize=7)
+        elif osi_f0 is not None:
+            lines = [f"OSI={osi_f0:.2f}"]
+            if c_osi_f0 is not None:
+                lines.append(f"cOSI={c_osi_f0:.2f}")
+            ax.text(0.98, 0.98, "\n".join(lines),
+                    transform=ax.transAxes, ha="right", va="top", fontsize=7)
+
+    # Bottom row: polar axes
+    def _closed(angles_rad, y):
+        return np.append(angles_rad, angles_rad[0]), np.append(y, y[0])
+
+    polar_rlabel_rots = []
+    for col, key in enumerate(keys):
+        ax = fig.add_subplot(2, ncols, ncols + col + 1, projection="polar")
+
+        data = curves[key]
+        angles_deg = np.asarray(data["angles"], dtype=float)
+        order = np.argsort(angles_deg)
+        angles_rad = np.radians(angles_deg[order])
+        both_mode = "mean_f1" in data
+
+        y_f0 = np.asarray(data["mean"], dtype=float)[order]
+        th, r = _closed(angles_rad, y_f0)
+        ax.plot(th, r, "o-", markersize=4, linewidth=1.5, label="F0")
+
+        if both_mode:
+            y_f1 = np.asarray(data["mean_f1"], dtype=float)[order]
+            th, r = _closed(angles_rad, y_f1)
+            ax.plot(th, r, "s--", markersize=4, linewidth=1.5, label="F1")
+
+        ax.set_title(key, fontsize=7, pad=4)
+        ax.set_theta_zero_location("N")
+        ax.set_theta_direction(-1)
+        ax.grid(True, alpha=0.3)
+        if both_mode:
+            ax.legend(fontsize=6, frameon=False, loc="upper right",
+                      bbox_to_anchor=(1.35, 1.15))
+        y_for_pref = y_f1 if (both_mode and "mean_f1" in data) else y_f0
+        pref_angle_deg = float(angles_deg[order][np.argmax(y_for_pref)])
+        label_angle = (pref_angle_deg + 90) % 360
+        label_angle = round(label_angle / 45) * 45  # snap to nearest 45°
+        ax.set_rlabel_position(label_angle)
+        rounded_pref = round(pref_angle_deg / 45) * 45
+        rot = (90 - rounded_pref) % 180
+        if rot > 90:
+            rot -= 180
+        polar_rlabel_rots.append((ax, rot))
+
+    if title is None:
+        sf_str = f" (scale={scale_factor})" if scale_factor is not None else ""
+        title = f"Representative neurons{sf_str}"
+    fig.suptitle(title, y=1.01)
+    fig.tight_layout()
+    for ax, rot in polar_rlabel_rots:
+        ax.tick_params(axis='y', labelrotation=rot)
+    if filename:
+        fig.savefig(filename, bbox_inches="tight")
+    return fig
 
 
 def tuning_curve(
@@ -681,17 +865,20 @@ def tuning_curve(
         data["n"] = np.asarray(data["n"], dtype=int)
         data["fit"] = _fit(data["angles"], data["mean"]) if fit else None
         data["osi"] = orientation_selectivity_index(np.maximum(data["mean"], 0), data["angles"])
+        data["classical_osi"] = classical_orientation_selectivity_index(np.maximum(data["mean"], 0), data["angles"])
         data["fwhm"] = _fwhm(data["fit"])
 
         if both_mode and "mean_f1" in data:
             data["mean_f1"] = np.asarray(data["mean_f1"], dtype=float)
             data["fit_f1"] = _fit(data["angles"], data["mean_f1"]) if fit else None
             data["osi_f1"] = orientation_selectivity_index(np.maximum(data["mean_f1"], 0), data["angles"])
+            data["classical_osi_f1"] = classical_orientation_selectivity_index(np.maximum(data["mean_f1"], 0), data["angles"])
             data["fwhm_f1"] = _fwhm(data["fit_f1"])
             # Aliases for clarity
             data["mean_f0"] = data["mean"]
             data["fit_f0"] = data["fit"]
             data["osi_f0"] = data["osi"]
+            data["classical_osi_f0"] = data["classical_osi"]
             data["fwhm_f0"] = data["fwhm"]
 
     return curves
@@ -802,8 +989,8 @@ def plot_tuning_curves(curves, types=None, show_sem=True, show_fit=True, ax=None
                 ax.plot(x_fit, y_fit_dense, linewidth=2.0, linestyle="--", alpha=0.9, color=color)
 
     ax.set_xlabel("Angle (deg)")
-    ax.set_ylabel("Score")
-    ax.set_xticks([0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165])
+    ax.set_ylabel("Response (F1 of ReLU(V))")
+    ax.set_xticks([0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360])
     if ylim is None:
         ax.set_ylim(bottom=0.0)
     else:
@@ -811,6 +998,32 @@ def plot_tuning_curves(curves, types=None, show_sem=True, show_fit=True, ax=None
     ax.set_title("Tuning Curves by Type")
     ax.grid(True, alpha=0.25)
     ax.legend(frameon=False, fontsize=8)
+
+    # # OSI annotations — one line per cell type, stacked in the top-right corner
+    # osi_lines = []
+    # for cell_type in cell_types:
+    #     data = curves[cell_type]
+    #     both_mode = "mean_f1" in data
+    #     if both_mode:
+    #         osi_f0 = data.get("osi_f0", data.get("osi"))
+    #         osi_f1 = data.get("osi_f1")
+    #         if osi_f0 is not None and osi_f1 is not None:
+    #             osi_lines.append(f"{cell_type}: OSI F0={osi_f0:.2f}, F1={osi_f1:.2f}")
+    #         elif osi_f0 is not None:
+    #             osi_lines.append(f"{cell_type}: OSI={osi_f0:.2f}")
+    #     else:
+    #         osi = data.get("osi")
+    #         if osi is not None:
+    #             osi_lines.append(f"{cell_type}: OSI={osi:.2f}")
+    # for i, text in enumerate(osi_lines):
+    #     ax.text(
+    #         0.98, 0.98 - i * 0.09,
+    #         text,
+    #         transform=ax.transAxes,
+    #         ha="right", va="top",
+    #         fontsize=7,
+    #     )
+
     return ax
 
 """
@@ -898,22 +1111,30 @@ def plot_curves_by_param(curves_arr, params_arr, types=None, cmap="viridis", fil
             data = curves[cell_type]
             osi_f0 = data.get("osi", data.get("osi_f0"))
             osi_f1 = data.get("osi_f1")
+            c_osi_f0 = data.get("classical_osi", data.get("classical_osi_f0"))
+            c_osi_f1 = data.get("classical_osi_f1")
             color = cmap_obj(norm(float(param)))
             if _any_both and osi_f0 is not None and osi_f1 is not None:
-                osi_lines.append((f"p={param:g}: OSI F0={osi_f0:.2f}, F1={osi_f1:.2f}", color))
+                line = f"p={param:g}: OSI F0={osi_f0:.2f}, F1={osi_f1:.2f}"
+                if c_osi_f0 is not None and c_osi_f1 is not None:
+                    line += f"\n  cOSI F0={c_osi_f0:.2f}, F1={c_osi_f1:.2f}"
+                osi_lines.append((line, color))
             elif osi_f0 is not None:
-                osi_lines.append((f"p={param:g}: OSI={osi_f0:.2f}", color))
+                line = f"p={param:g}: OSI={osi_f0:.2f}"
+                if c_osi_f0 is not None:
+                    line += f"  cOSI={c_osi_f0:.2f}"
+                osi_lines.append((line, color))
 
         # Stack OSI text in top-right corner
-        for i, (text, color) in enumerate(reversed(osi_lines)):
-            ax.text(
-                0.98, 0.98 - i * 0.10,
-                text,
-                transform=ax.transAxes,
-                ha="right", va="top",
-                fontsize=7,
-                color=color,
-            )
+        # for i, (text, color) in enumerate(reversed(osi_lines)):
+        #     ax.text(
+        #         0.98, 0.98 - i * 0.05,
+        #         text,
+        #         transform=ax.transAxes,
+        #         ha="right", va="top",
+        #         fontsize=7,
+        #         color=color,
+        #     )
 
         # Add F0/F1 legend using proxy artists when both components are shown
         if _any_both:
@@ -936,5 +1157,5 @@ def plot_curves_by_param(curves_arr, params_arr, types=None, cmap="viridis", fil
     cbar.set_ticklabels([f"{v:g}" for v in tick_values])
     cbar.set_label("Parameter value")
     fig.suptitle("Tuning Curves by Type Across Parameter Sweep", y=1.02)
-    plt.savefig(filename)
+    # plt.savefig(filename)
     return fig, axes
